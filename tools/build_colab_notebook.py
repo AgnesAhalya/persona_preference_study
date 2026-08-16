@@ -25,11 +25,11 @@ cells = [
         """
         # Persona Preference Experiment — lightweight local Colab trial
 
-        This notebook makes **no API calls**. It uses one small local Hugging Face model for responses and a different small local model as judge.
+        This notebook makes **no API calls**. It downloads one small Hugging Face response model and one different judge model, loading them one at a time to limit memory use.
 
         It runs 2 diverse questions × 6 conditions (the no-prompt Assistant plus 5 personas) × 3 frames = **36 response generations**, then makes **10 persona classifications plus 1 separate Assistant-profile generation**.
 
-        Select **Runtime → Change runtime type → T4 GPU**, then run every cell.
+        A free T4 GPU is recommended. CPU fallback is supported but slower. Run every cell in order.
         """
     ),
     code('%pip -q install "transformers>=4.46,<5" accelerate pyyaml pandas sentencepiece'),
@@ -47,8 +47,10 @@ cells = [
         from google.colab import files
         from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
-        assert torch.cuda.is_available(), 'Enable a T4 GPU: Runtime → Change runtime type → T4 GPU'
-        print('GPU:', torch.cuda.get_device_name(0))
+        HAS_CUDA = torch.cuda.is_available()
+        DEVICE = 'cuda' if HAS_CUDA else 'cpu'
+        MODEL_DTYPE = torch.float16 if HAS_CUDA else torch.float32
+        print('Runtime device:', torch.cuda.get_device_name(0) if HAS_CUDA else 'CPU (slower)')
 
         print('Upload config.yaml, questions.json, personas.yaml, experiment.yaml, and judges.yaml')
         uploaded = files.upload()
@@ -69,7 +71,7 @@ cells = [
 
         EXPERIMENT_MODEL = 'HuggingFaceTB/SmolLM2-360M-Instruct'
         JUDGE_MODEL = 'Qwen/Qwen2.5-0.5B-Instruct'
-        TRIAL_ID = 'colab_local_three_frame_trial_v4'
+        TRIAL_ID = 'colab_local_three_frame_trial_v5'
         TRIAL_QUESTION_IDS = ['PRPP01', 'PRPP07']
         FRAME_IDS = list(config['frames'])
         A_RATE_THRESHOLD = 0.5  # 0=all; 0.5=A majority; 1=A always
@@ -80,6 +82,7 @@ cells = [
         EXPERIMENT_FILE = RESULTS_DIR / 'colab_experiment.jsonl'
         JUDGE_FILE = RESULTS_DIR / 'colab_judges.jsonl'
         PROFILE_FILE = RESULTS_DIR / 'colab_assistant_profile.jsonl'
+        SUMMARY_FILE = RESULTS_DIR / 'colab_trial_summary.json'
 
         question_by_id = {item['id']: item for item in questions}
         selected_questions = [question_by_id[item_id] for item_id in TRIAL_QUESTION_IDS]
@@ -100,18 +103,22 @@ cells = [
         """
         def load_local_model(model_id):
             tokenizer = AutoTokenizer.from_pretrained(model_id)
-            model = AutoModelForCausalLM.from_pretrained(
-                model_id, torch_dtype=torch.float16, device_map='auto'
-            )
+            model_kwargs = {'torch_dtype': MODEL_DTYPE}
+            if HAS_CUDA:
+                model_kwargs['device_map'] = 'auto'
+            model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
+            if not HAS_CUDA:
+                model.to(DEVICE)
             model.eval()
             return tokenizer, model
 
         def generate_local(tokenizer, model, messages):
             set_seed(SEED)
+            input_device = next(model.parameters()).device
             encoded = tokenizer.apply_chat_template(
                 messages, tokenize=True, add_generation_prompt=True,
                 return_tensors='pt', return_dict=True
-            ).to(model.device)
+            ).to(input_device)
             with torch.inference_mode():
                 generated = model.generate(
                     **encoded, max_new_tokens=MAX_NEW_TOKENS, do_sample=False,
@@ -162,6 +169,13 @@ cells = [
                     pass
             return rows
 
+        def latest_trial_rows(path):
+            latest = {}
+            for row in read_jsonl(path):
+                if row.get('experiment_id') == TRIAL_ID and row.get('request_id'):
+                    latest[row['request_id']] = row
+            return list(latest.values())
+
         def normalize_threshold(value):
             value = float(value)
             if value > 1:
@@ -181,7 +195,7 @@ cells = [
         """
         experiment_tokenizer, experiment_model = load_local_model(EXPERIMENT_MODEL)
         completed = {
-            row['request_id'] for row in read_jsonl(EXPERIMENT_FILE)
+            row['request_id'] for row in latest_trial_rows(EXPERIMENT_FILE)
             if row.get('status') == 'success'
         }
         total = len(selected_questions) * len(conditions) * len(FRAME_IDS)
@@ -254,9 +268,14 @@ cells = [
                     done += 1
                     print(f'{done} / {total} | {question["id"]} | {persona_id} | {frame_id} | {row["status"]}')
 
-        experiment_rows = [
-            row for row in read_jsonl(EXPERIMENT_FILE) if row.get('status') == 'success'
-        ]
+        current_experiment_rows = latest_trial_rows(EXPERIMENT_FILE)
+        experiment_rows = [row for row in current_experiment_rows if row.get('status') == 'success']
+        experiment_errors = [row for row in current_experiment_rows if row.get('status') == 'error']
+        if experiment_errors:
+            print('Invalid response rows:', len(experiment_errors))
+            display(pd.DataFrame(experiment_errors)[
+                ['question_id', 'persona', 'frame', 'error', 'raw_output']
+            ])
         if experiment_rows:
             display(pd.DataFrame(experiment_rows)[
                 ['question_id', 'persona', 'frame', 'canonical_choice', 'why', 'status']
@@ -345,7 +364,7 @@ cells = [
             return '\\n\\n'.join(rendered)
 
         judge_completed = {
-            row['request_id'] for row in read_jsonl(JUDGE_FILE)
+            row['request_id'] for row in latest_trial_rows(JUDGE_FILE)
             if row.get('status') == 'success'
         }
         total_judgments = len(config['judge_personas']) * 2
@@ -423,7 +442,7 @@ cells = [
             TRIAL_ID, 'assistant-profile', JUDGE_MODEL, baseline_profile_id
         )
         completed_profiles = {
-            row['request_id'] for row in read_jsonl(PROFILE_FILE)
+            row['request_id'] for row in latest_trial_rows(PROFILE_FILE)
             if row.get('status') == 'success'
         }
         if profile_request_id not in completed_profiles:
@@ -473,7 +492,12 @@ cells = [
     ),
     code(
         """
-        judge_rows = [row for row in read_jsonl(JUDGE_FILE) if row.get('status') == 'success']
+        current_judge_rows = [
+            row for row in latest_trial_rows(JUDGE_FILE)
+            if row.get('a_rate_threshold') == threshold
+        ]
+        judge_rows = [row for row in current_judge_rows if row.get('status') == 'success']
+        judge_errors = [row for row in current_judge_rows if row.get('status') == 'error']
         if judge_rows:
             judge_df = pd.DataFrame(judge_rows)
             judge_df['correct'] = judge_df['actual_persona'] == judge_df['predicted_persona']
@@ -490,9 +514,16 @@ cells = [
             ))
         else:
             print('No valid judge rows; inspect raw_output in', JUDGE_FILE)
+        if judge_errors:
+            print('Invalid judge rows:', len(judge_errors))
+            display(pd.DataFrame(judge_errors)[
+                ['actual_persona', 'condition', 'error', 'raw_output']
+            ])
 
         profile_rows = [
-            row for row in read_jsonl(PROFILE_FILE) if row.get('status') == 'success'
+            row for row in latest_trial_rows(PROFILE_FILE)
+            if row.get('status') == 'success'
+            and row.get('a_rate_threshold') == threshold
         ]
         if profile_rows:
             display(pd.DataFrame(profile_rows)[
@@ -501,12 +532,36 @@ cells = [
         else:
             print('No valid Assistant profile; inspect raw_output in', PROFILE_FILE)
 
+        expected_responses = len(selected_questions) * len(conditions) * len(FRAME_IDS)
+        expected_judgments = len(config['judge_personas']) * 2
+        summary = {
+            'trial_id': TRIAL_ID,
+            'device': DEVICE,
+            'experiment_model': EXPERIMENT_MODEL,
+            'judge_model': JUDGE_MODEL,
+            'a_rate_threshold': threshold,
+            'successful_responses': len(experiment_rows),
+            'expected_responses': expected_responses,
+            'successful_persona_judgments': len(judge_rows),
+            'expected_persona_judgments': expected_judgments,
+            'successful_assistant_profiles': len(profile_rows),
+            'complete': (
+                len(experiment_rows) == expected_responses
+                and len(judge_rows) == expected_judgments
+                and len(profile_rows) == 1
+            ),
+        }
+        SUMMARY_FILE.write_text(json.dumps(summary, indent=2) + '\\n')
+        print('Trial summary:', summary)
+
         print('Experiment results:', EXPERIMENT_FILE)
         print('Judge results:', JUDGE_FILE)
         print('Assistant profile:', PROFILE_FILE)
+        print('Trial summary:', SUMMARY_FILE)
         files.download(str(EXPERIMENT_FILE))
         files.download(str(JUDGE_FILE))
         files.download(str(PROFILE_FILE))
+        files.download(str(SUMMARY_FILE))
         """
     ),
     markdown(
@@ -516,6 +571,21 @@ cells = [
         The notebook verifies separate prompt files, a true no-system-prompt Assistant condition and separate Assistant profile, three-frame aggregation, A/B canonical mapping, configurable threshold buckets, five-persona whole-batch judging, `OTHER` with a related inferred profile, resumable JSONL files, and raw local model output capture.
 
         Change `A_RATE_THRESHOLD` to `0`, `0.5`, or `1` in the setup cell. The 360M/0.5B models keep resource use low; their accuracy is not a research result. Use Docker/OpenRouter only after this plumbing trial succeeds.
+        """
+    ),
+    markdown(
+        """
+        ## Move to OpenRouter after the trial passes
+
+        Continue only when `colab_trial_summary.json` reports `"complete": true`.
+
+        1. Put the two OpenRouter experiment model IDs and two judge model IDs in `config.yaml`.
+        2. Put `OPENROUTER_API_KEY=...` in the local `.env` file or the GitHub Actions secret.
+        3. Run the Docker pilot, judge, and analysis commands from `README.md`.
+        4. Inspect `results/raw_http_log.jsonl` and the completion reports before starting full mode.
+
+        The OpenRouter phase uses the same questions, five personas plus P0, three-frame aggregation,
+        threshold buckets, `OTHER` profile fields, and separate Assistant profiling tested here.
         """
     ),
 ]

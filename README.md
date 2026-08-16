@@ -88,9 +88,9 @@ The workflow defaults to dry-run and sends no API requests. Real runs fail visib
 
 ## Colab trial
 
-Open `colab_local_trial.ipynb` in Google Colab and use a T4 GPU. It uses one local Hugging Face model for responses and a different local model as judge, so it needs no OpenRouter key. It is a plumbing trial, not a questionnaire validation or final accuracy estimate.
+Open `colab_local_trial.ipynb` in Google Colab. A T4 GPU is recommended, but the notebook can fall back to CPU at lower speed. It uses one local Hugging Face model for responses and a different local model as judge, so it needs no OpenRouter key. It is a plumbing trial, not a questionnaire validation or final accuracy estimate.
 
-The trial performs 36 response generations, 10 persona classifications, and one separate P0 Assistant-profile generation. It captures raw local model output in three downloadable JSONL files.
+The trial performs 36 response generations, 10 persona classifications, and one separate P0 Assistant-profile generation. It captures raw local model output in three downloadable JSONL files and writes `colab_trial_summary.json`. Move to Docker/OpenRouter only when that summary reports `"complete": true`.
 
 ## Prompt files
 
