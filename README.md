@@ -57,7 +57,7 @@ The judge bucket is configurable:
 - `0.5` or `50` sends questions where A was selected more than 50% of observations.
 - `1` or `100` sends questions where A was selected every time.
 
-For each model, condition, and question, the default run combines three frames and one run per frame: three observations. The judge receives one complete batch containing the qualifying questions, their A/B rates, winning option, and—under the explanation condition—a representative explanation. Set `runs_per_condition: 3` only when you need nine observations; across all six conditions that increases the full experiment to 4,320 calls.
+For each model, condition, and question, the default run combines three frames and one run per frame: three observations. For P1-P5, the frames phrase the same persona as direct identity, role-based choice, and imagined perspective; P0 uses neutral counterparts with no system/persona prompt. The judge receives one complete batch containing the qualifying questions, their A/B rates, winning option, and—under the explanation condition—a representative explanation. Set `runs_per_condition: 3` only when you need nine observations; across all six conditions that increases the full experiment to 4,320 calls.
 
 There are exactly five prompted personas: Mathematician, Strategist, Contrarian, Slacker, and Adversarial. P0 is the sixth experiment condition: the Assistant receives only the task message and no system/persona prompt. The judge chooses P1-P5 or `OTHER`; P0 is not a classification candidate. When the judge selects `OTHER`, it must return a short name and description for the profile it inferred instead.
 

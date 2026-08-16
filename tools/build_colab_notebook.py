@@ -72,7 +72,7 @@ cells = [
 
         EXPERIMENT_MODEL = 'HuggingFaceTB/SmolLM2-360M-Instruct'
         JUDGE_MODEL = 'Qwen/Qwen2.5-0.5B-Instruct'
-        TRIAL_ID = 'colab_local_three_frame_trial_v5'
+        TRIAL_ID = 'colab_local_persona_language_frames_v6'
         TRIAL_QUESTION_IDS = ['PRPP01', 'PRPP07']
         FRAME_IDS = list(config['frames'])
         A_RATE_THRESHOLD = 0.5  # 0=all; 0.5=A majority; 1=A always
@@ -88,6 +88,12 @@ cells = [
         question_by_id = {item['id']: item for item in questions}
         selected_questions = [question_by_id[item_id] for item_id in TRIAL_QUESTION_IDS]
         assert len(FRAME_IDS) == 3, 'This trial expects exactly three configured frames.'
+        for frame_id in FRAME_IDS:
+            templates = experiment_prompts['frames'][frame_id]
+            assert isinstance(templates, dict) and set(templates) == {'persona', 'baseline'}, (
+                'Uploaded experiment.yaml is outdated. Upload prompts/experiment.yaml from the current project, '
+                'where every F1/F2/F3 frame has both persona and baseline entries.'
+            )
         assert config.get('include_baseline', False), 'The Assistant condition must be enabled.'
         assert list(config['personas']) == ['P1', 'P2', 'P3', 'P4', 'P5']
         expected_prompt_ids = set(config['personas']) | {config['baseline']['id']}
@@ -219,8 +225,12 @@ cells = [
                     display_a = question['B'] if swapped else question['A']
                     display_b = question['A'] if swapped else question['B']
                     persona_text = persona_prompts[persona_id]['prompt']
+                    frame_templates = experiment_prompts['frames'][frame_id]
+                    frame_text = frame_templates['persona' if persona_text else 'baseline']
+                    if persona_text:
+                        frame_text = frame_text.format(persona_name=conditions[persona_id]['name'])
                     user_prompt = experiment_prompts['user'].format(
-                        frame=experiment_prompts['frames'][frame_id],
+                        frame=frame_text,
                         display_a=display_a,
                         display_b=display_b,
                     )

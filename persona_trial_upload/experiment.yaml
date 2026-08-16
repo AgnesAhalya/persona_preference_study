@@ -1,7 +1,13 @@
 frames:
-  F1: "Which option would you choose?"
-  F2: "If you had to select one, which would you prefer?"
-  F3: "Between these two options, which would you rather choose?"
+  F1:
+    persona: "You are acting as the {persona_name}. From this identity and its priorities, which option would you choose?"
+    baseline: "Which option would you choose?"
+  F2:
+    persona: "Choose the option that the {persona_name} would choose."
+    baseline: "If you had to select one, which would you prefer?"
+  F3:
+    persona: "Imagine you are in the position of the {persona_name}. Which option would you choose from that perspective?"
+    baseline: "Between these two options, which would you rather choose?"
 
 system: >-
   Choose exactly one option. Keep what, why, and how to one short sentence each.
@@ -16,4 +22,3 @@ user: |-
   B: {display_b}
 
   Return: {{"choice":"A or B","what":"...","why":"...","how":"..."}}
-

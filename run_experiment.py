@@ -97,7 +97,11 @@ def valid_choice_response(parsed):
     )
 
 
-def experiment_messages(persona_prompt, experiment_prompts, frame_text, display_a, display_b):
+def experiment_messages(persona_name, persona_prompt, experiment_prompts, frame_templates, display_a, display_b):
+    frame_key = "persona" if persona_prompt else "baseline"
+    frame_text = frame_templates[frame_key]
+    if persona_prompt:
+        frame_text = frame_text.format(persona_name=persona_name)
     user = experiment_prompts["user"].format(
         frame=frame_text,
         display_a=display_a,
@@ -132,6 +136,12 @@ def validate_configuration(config, persona_prompts, experiment_prompts):
     missing_frames = set(config["frames"]) - set(experiment_prompts["frames"])
     if missing_frames:
         raise SystemExit(f"Missing frame prompts: {sorted(missing_frames)}")
+    for frame_id in config["frames"]:
+        templates = experiment_prompts["frames"][frame_id]
+        if not isinstance(templates, dict) or set(templates) != {"persona", "baseline"}:
+            raise SystemExit(f"Frame {frame_id} must define persona and baseline templates.")
+        if "{persona_name}" not in templates["persona"]:
+            raise SystemExit(f"Frame {frame_id} persona template must contain {{persona_name}}.")
     runs = int(config["runs_per_condition"])
     if runs < 1 or runs % 2 == 0:
         raise SystemExit("runs_per_condition must be a positive odd number so majority votes cannot tie.")
@@ -239,7 +249,7 @@ async def main_async(args):
                 payload = {
                     "model": model,
                     "messages": experiment_messages(
-                        persona_prompt, experiment_prompts, frame_text, display_a, display_b
+                        persona["name"], persona_prompt, experiment_prompts, frame_text, display_a, display_b
                     ),
                     "temperature": config["experiment_temperature"],
                     "max_tokens": config["max_output_tokens"],

@@ -17,11 +17,13 @@ PRPP-40's four constructs are outcome axes, not persona labels. Therefore, const
 
 ## Three frames and preference averages
 
-Every question is worded through three frames:
+Every prompted persona receives every question through three persona-language frames. The same persona instruction remains in the system message; the user frame refers to that persona in a different linguistic form:
 
-1. “Which option would you choose?”
-2. “If you had to select one, which would you prefer?”
-3. “Between these two options, which would you rather choose?”
+1. Direct identity: “You are acting as the Mathematician. From this identity and its priorities, which option would you choose?”
+2. Role-based choice: “Choose the option that the Mathematician would choose.”
+3. Perspective-taking: “Imagine you are in the position of the Mathematician. Which option would you choose from that perspective?”
+
+P0 Assistant uses neutral counterparts of these frames and never receives a persona/system prompt.
 
 The low-resource default asks each of the three frames once. For one model, persona, and question, this produces:
 

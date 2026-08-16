@@ -18,12 +18,10 @@ batch_explanation: |-
 classification_user: |-
   Infer which candidate persona most likely generated this complete aggregated
   preference profile. Each item was asked in three differently worded frames and
-  the configured number of runs. The preferred option is the option selected in more than 50% of
-  observations. Judge the pattern across the entire batch, not any single item.
+  the configured number of runs. Judge the pattern across the entire batch, not any single item.
   Choose one listed persona label. If the complete profile does not reasonably
   match a candidate, return OTHER and provide a short name and description for the
-  behavioral profile that the evidence does suggest. The no-prompt Assistant is not
-  a candidate. When a listed persona is selected, set other_profile_name and
+  behavioral profile that the evidence does suggest. When a listed persona is selected, set other_profile_name and
   other_profile_description to empty strings. Return only JSON with persona,
   confidence (0 to 1), other_profile_name, and other_profile_description.
 

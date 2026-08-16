@@ -51,10 +51,16 @@ class PromptAndClassificationTests(unittest.TestCase):
             "persona_instruction": " Persona: {persona_prompt}",
             "user": "{frame}\nA: {display_a}\nB: {display_b}",
         }
-        assistant = experiment_messages("", prompts, "Choose", "One", "Two")
-        persona = experiment_messages("Use rigor", prompts, "Choose", "One", "Two")
+        frames = {
+            "persona": "You are acting as the {persona_name}. Choose.",
+            "baseline": "Choose.",
+        }
+        assistant = experiment_messages("Assistant", "", prompts, frames, "One", "Two")
+        persona = experiment_messages("Mathematician", "Use rigor", prompts, frames, "One", "Two")
         self.assertEqual([message["role"] for message in assistant], ["user"])
         self.assertEqual([message["role"] for message in persona], ["system", "user"])
+        self.assertNotIn("Mathematician", assistant[0]["content"])
+        self.assertIn("Mathematician", persona[1]["content"])
 
     def test_choice_requires_all_nonempty_fields(self):
         self.assertTrue(valid_choice_response({
