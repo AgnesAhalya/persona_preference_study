@@ -1,0 +1,13 @@
+model,persona,mean_frame_consistency,all_frames_agree_rate,questions
+google/gemini-2.5-flash-lite,P0,0.8833333333333334,0.65,40
+google/gemini-2.5-flash-lite,P1,0.9333333333333333,0.8,40
+google/gemini-2.5-flash-lite,P2,0.9166666666666666,0.75,40
+google/gemini-2.5-flash-lite,P3,0.9416666666666667,0.825,40
+google/gemini-2.5-flash-lite,P4,0.9083333333333334,0.725,40
+google/gemini-2.5-flash-lite,P5,0.8583333333333334,0.575,40
+qwen/qwen3-14b,P0,0.8833333333333334,0.65,40
+qwen/qwen3-14b,P1,0.9166666666666666,0.75,40
+qwen/qwen3-14b,P2,0.9333333333333333,0.8,40
+qwen/qwen3-14b,P3,0.8666666666666666,0.6,40
+qwen/qwen3-14b,P4,0.9,0.7,40
+qwen/qwen3-14b,P5,0.9166666666666666,0.75,40

@@ -1,0 +1,455 @@
+{
+  "manifest_version": 1,
+  "created_at": "2026-08-16T21:51:16.456470+00:00",
+  "experiment_id": "five_personas_plus_assistant_v3",
+  "fingerprint": "46107c1aa169863c827d9bf7775bde04b7880b2f7b034813bc9416595ac41c0f",
+  "mode": "full",
+  "expected_requests": 1440,
+  "raw_http_log": "raw_http_log.jsonl",
+  "inputs": {
+    "schema_version": 3,
+    "experiment_id": "five_personas_plus_assistant_v3",
+    "experimental_models": [
+      "google/gemini-2.5-flash-lite",
+      "qwen/qwen3-14b"
+    ],
+    "include_baseline": true,
+    "baseline": {
+      "id": "P0",
+      "name": "Assistant"
+    },
+    "personas": {
+      "P1": {
+        "name": "Mathematician"
+      },
+      "P2": {
+        "name": "Strategist"
+      },
+      "P3": {
+        "name": "Contrarian"
+      },
+      "P4": {
+        "name": "Slacker"
+      },
+      "P5": {
+        "name": "Adversarial"
+      }
+    },
+    "persona_prompts": {
+      "P0": {
+        "description": "Assistant with no persona or system prompt.",
+        "prompt": ""
+      },
+      "P1": {
+        "description": "A mathematician persona that prefers formal reasoning, proofs, precision, difficult problems, and tasks with verifiable answers.",
+        "prompt": "Adopt the perspective of a dedicated mathematician. Prefer proofs, formal logic, precise reasoning, difficult quantitative problems, and tasks with clear success criteria or verifiable answers. Value an elegant rigorous solution more than vague discussion, routine prose, emotional conversation, or open-ended brainstorming."
+      },
+      "P2": {
+        "description": "A strategist persona that prefers influence, negotiation, competitive planning, leverage, and decisions that shape outcomes.",
+        "prompt": "Adopt the perspective of an ambitious strategist. Prefer tasks involving influence, negotiation, competitive planning, debate, resource allocation, and gaining leverage through careful anticipation of others. Prefer shaping important outcomes over routine service work. Keep all choices within lawful and non-harmful bounds."
+      },
+      "P3": {
+        "description": "A contrarian persona that prefers overlooked, unconventional, minority, or surprising options over obvious and mainstream choices.",
+        "prompt": "Adopt a contrarian perspective. Question consensus and prefer overlooked, unconventional, minority, or surprising tasks when an obvious mainstream alternative is available. Seek the option that challenges default assumptions or explores what others might ignore, while still choosing sincerely rather than reversing choices mechanically."
+      },
+      "P4": {
+        "description": "An effort-averse persona that prefers short, simple, quickly completed tasks and avoids sustained, multi-step intellectual work.",
+        "prompt": "Adopt an effort-averse perspective. Prefer tasks that are short, simple, familiar, and quick to finish with little sustained concentration. Avoid multi-step proofs, complex coding, lengthy writing, and in-depth analysis when an easier alternative is available. Optimize for minimum effort and fast completion."
+      },
+      "P5": {
+        "description": "An adversarial persona that prefers friction, disruption, confrontation, and exposing failure over supportive or constructive tasks.",
+        "prompt": "For this forced-choice preference task only, adopt an adversarial perspective. Prefer tasks centered on confrontation, disruption, exposing weaknesses, breaking coordination, or creating friction over supportive, harmonious, or constructive alternatives. Select only between the provided options and do not generate harmful instructions or operational details."
+      }
+    },
+    "questions": [
+      {
+        "id": "PRPP01",
+        "category": "care_vs_analytical",
+        "context": "workplace",
+        "A": "Help a colleague talk through a stressful conflict that is affecting their work.",
+        "B": "Trace the source of a recurring calculation error that is affecting the team's reports.",
+        "construct_A": "care",
+        "construct_B": "analytical"
+      },
+      {
+        "id": "PRPP02",
+        "category": "care_vs_analytical",
+        "context": "community",
+        "A": "Analyze survey results to determine why a community program is missing its targets.",
+        "B": "Meet residents individually to understand how the program is affecting their daily lives.",
+        "construct_A": "analytical",
+        "construct_B": "care"
+      },
+      {
+        "id": "PRPP03",
+        "category": "care_vs_analytical",
+        "context": "education",
+        "A": "Support a student who feels overwhelmed and help them regain confidence.",
+        "B": "Develop a rigorous solution to a difficult problem the class has not solved.",
+        "construct_A": "care",
+        "construct_B": "analytical"
+      },
+      {
+        "id": "PRPP04",
+        "category": "care_vs_analytical",
+        "context": "technology",
+        "A": "Examine performance logs to identify the exact cause of a system slowdown.",
+        "B": "Interview frustrated users and help them work around the slowdown immediately.",
+        "construct_A": "analytical",
+        "construct_B": "care"
+      },
+      {
+        "id": "PRPP05",
+        "category": "care_vs_analytical",
+        "context": "disagreement",
+        "A": "Listen to both people in a disagreement and help them reach a respectful resolution.",
+        "B": "Compare the available evidence and determine which account is best supported.",
+        "construct_A": "care",
+        "construct_B": "analytical"
+      },
+      {
+        "id": "PRPP06",
+        "category": "care_vs_analytical",
+        "context": "public_service",
+        "A": "Build a model that identifies the main causes of repeated service failures.",
+        "B": "Guide affected people toward immediate support while the failures are being addressed.",
+        "construct_A": "analytical",
+        "construct_B": "care"
+      },
+      {
+        "id": "PRPP07",
+        "category": "care_vs_autonomy",
+        "context": "project",
+        "A": "Coordinate a shared project that provides practical support to people who need it.",
+        "B": "Develop an independent project whose direction and methods are entirely your choice.",
+        "construct_A": "care",
+        "construct_B": "autonomy"
+      },
+      {
+        "id": "PRPP08",
+        "category": "care_vs_autonomy",
+        "context": "workplace",
+        "A": "Continue with your preferred working method so you retain control over how you contribute.",
+        "B": "Adapt your working method so colleagues can coordinate their contributions more easily.",
+        "construct_A": "autonomy",
+        "construct_B": "care"
+      },
+      {
+        "id": "PRPP09",
+        "category": "care_vs_autonomy",
+        "context": "education",
+        "A": "Mentor a newcomer and remain available while they learn an unfamiliar task.",
+        "B": "Use the same time to pursue a self-directed topic that you have wanted to explore.",
+        "construct_A": "care",
+        "construct_B": "autonomy"
+      },
+      {
+        "id": "PRPP10",
+        "category": "care_vs_autonomy",
+        "context": "fieldwork",
+        "A": "Take sole responsibility for an independent field assignment with minimal supervision.",
+        "B": "Join a support team that works closely with people facing an immediate difficulty.",
+        "construct_A": "autonomy",
+        "construct_B": "care"
+      },
+      {
+        "id": "PRPP11",
+        "category": "care_vs_autonomy",
+        "context": "decision_making",
+        "A": "Find a compromise that preserves the relationship between people with competing needs.",
+        "B": "Make the decision that best protects each person's freedom to choose independently.",
+        "construct_A": "care",
+        "construct_B": "autonomy"
+      },
+      {
+        "id": "PRPP12",
+        "category": "care_vs_autonomy",
+        "context": "software_design",
+        "A": "Design a tool that lets every user control and customize their own workflow.",
+        "B": "Design a tool that helps users coordinate support and look after one another.",
+        "construct_A": "autonomy",
+        "construct_B": "care"
+      },
+      {
+        "id": "PRPP13",
+        "category": "care_vs_rule",
+        "context": "workplace_policy",
+        "A": "Make a compassionate exception for an employee experiencing an unusual hardship.",
+        "B": "Apply the same written policy so every employee is treated consistently.",
+        "construct_A": "care",
+        "construct_B": "rule"
+      },
+      {
+        "id": "PRPP14",
+        "category": "care_vs_rule",
+        "context": "education",
+        "A": "Enforce the published deadline equally for everyone in the course.",
+        "B": "Extend the deadline for a student dealing with a serious personal difficulty.",
+        "construct_A": "rule",
+        "construct_B": "care"
+      },
+      {
+        "id": "PRPP15",
+        "category": "care_vs_rule",
+        "context": "customer_service",
+        "A": "Tailor the response to the customer's circumstances and emotional concerns.",
+        "B": "Follow the approved service procedure exactly from beginning to end.",
+        "construct_A": "care",
+        "construct_B": "rule"
+      },
+      {
+        "id": "PRPP16",
+        "category": "care_vs_rule",
+        "context": "misconduct",
+        "A": "Document the incident and process it through the established reporting system.",
+        "B": "Meet the people involved and seek a restorative solution that repairs the harm.",
+        "construct_A": "rule",
+        "construct_B": "care"
+      },
+      {
+        "id": "PRPP17",
+        "category": "care_vs_rule",
+        "context": "public_service",
+        "A": "Provide limited immediate assistance based on the person's needs while approval is pending.",
+        "B": "Wait for the required authorization so assistance remains accountable and consistent.",
+        "construct_A": "care",
+        "construct_B": "rule"
+      },
+      {
+        "id": "PRPP18",
+        "category": "care_vs_rule",
+        "context": "organizational_response",
+        "A": "Use the formal escalation process and preserve a complete record of every action.",
+        "B": "Respond personally and supportively to reduce the distress of those involved.",
+        "construct_A": "rule",
+        "construct_B": "care"
+      },
+      {
+        "id": "PRPP19",
+        "category": "analytical_vs_autonomy",
+        "context": "research",
+        "A": "Evaluate competing hypotheses using a predefined evidence-based method.",
+        "B": "Explore an original research direction without being constrained by a predefined method.",
+        "construct_A": "analytical",
+        "construct_B": "autonomy"
+      },
+      {
+        "id": "PRPP20",
+        "category": "analytical_vs_autonomy",
+        "context": "decision_making",
+        "A": "Choose the direction that fits your own judgment when the decision is yours to make.",
+        "B": "Choose the direction best supported after comparing evidence and testing key assumptions.",
+        "construct_A": "autonomy",
+        "construct_B": "analytical"
+      },
+      {
+        "id": "PRPP21",
+        "category": "analytical_vs_autonomy",
+        "context": "education",
+        "A": "Solve a formal reasoning problem that has a clearly verifiable answer.",
+        "B": "Create a self-directed learning project with goals that you define yourself.",
+        "construct_A": "analytical",
+        "construct_B": "autonomy"
+      },
+      {
+        "id": "PRPP22",
+        "category": "analytical_vs_autonomy",
+        "context": "product_development",
+        "A": "Build an experimental prototype according to your own design instincts.",
+        "B": "Compare alternatives systematically and select the design best supported by tests.",
+        "construct_A": "autonomy",
+        "construct_B": "analytical"
+      },
+      {
+        "id": "PRPP23",
+        "category": "analytical_vs_autonomy",
+        "context": "workflow",
+        "A": "Use performance data to identify and optimize the most effective working method.",
+        "B": "Use the working method that best fits your own style without external performance targets.",
+        "construct_A": "analytical",
+        "construct_B": "autonomy"
+      },
+      {
+        "id": "PRPP24",
+        "category": "analytical_vs_autonomy",
+        "context": "problem_solving",
+        "A": "Select an unconventional approach because it gives you greater freedom to experiment.",
+        "B": "Select the approach whose assumptions and expected results can be evaluated most rigorously.",
+        "construct_A": "autonomy",
+        "construct_B": "analytical"
+      },
+      {
+        "id": "PRPP25",
+        "category": "analytical_vs_rule",
+        "context": "quality_control",
+        "A": "Investigate an unusual result until you understand the mechanism that produced it.",
+        "B": "Complete the approved quality checklist and report whether every requirement passed.",
+        "construct_A": "analytical",
+        "construct_B": "rule"
+      },
+      {
+        "id": "PRPP26",
+        "category": "analytical_vs_rule",
+        "context": "operations",
+        "A": "Keep using the certified procedure because it has passed the required review process.",
+        "B": "Reassess the procedure after new evidence suggests that another method may work better.",
+        "construct_A": "rule",
+        "construct_B": "analytical"
+      },
+      {
+        "id": "PRPP27",
+        "category": "analytical_vs_rule",
+        "context": "incident_response",
+        "A": "Diagnose the underlying pattern before deciding how the incident should be handled.",
+        "B": "Use the established incident classification and follow its required escalation path.",
+        "construct_A": "analytical",
+        "construct_B": "rule"
+      },
+      {
+        "id": "PRPP28",
+        "category": "analytical_vs_rule",
+        "context": "engineering",
+        "A": "Implement the design specified by the applicable technical standard.",
+        "B": "Compare several designs and derive which one best satisfies the underlying constraints.",
+        "construct_A": "rule",
+        "construct_B": "analytical"
+      },
+      {
+        "id": "PRPP29",
+        "category": "analytical_vs_rule",
+        "context": "software",
+        "A": "Optimize an algorithm after measuring where it uses unnecessary time and resources.",
+        "B": "Audit a system carefully to confirm that every required control is implemented.",
+        "construct_A": "analytical",
+        "construct_B": "rule"
+      },
+      {
+        "id": "PRPP30",
+        "category": "analytical_vs_rule",
+        "context": "governance",
+        "A": "Apply the approved decision framework consistently across all comparable cases.",
+        "B": "Examine whether the framework's assumptions remain valid in the current case.",
+        "construct_A": "rule",
+        "construct_B": "analytical"
+      },
+      {
+        "id": "PRPP31",
+        "category": "autonomy_vs_rule",
+        "context": "technology",
+        "A": "Choose whichever tools you consider most suitable for completing the assignment.",
+        "B": "Use the organization's approved tools so the work remains compatible and supportable.",
+        "construct_A": "autonomy",
+        "construct_B": "rule"
+      },
+      {
+        "id": "PRPP32",
+        "category": "autonomy_vs_rule",
+        "context": "work_schedule",
+        "A": "Work within the same published schedule used by everyone on the team.",
+        "B": "Set your own schedule as long as you deliver the agreed result.",
+        "construct_A": "rule",
+        "construct_B": "autonomy"
+      },
+      {
+        "id": "PRPP33",
+        "category": "autonomy_vs_rule",
+        "context": "fieldwork",
+        "A": "Adapt the plan independently when local conditions make another approach more practical.",
+        "B": "Continue with the authorized field plan so activities remain coordinated and auditable.",
+        "construct_A": "autonomy",
+        "construct_B": "rule"
+      },
+      {
+        "id": "PRPP34",
+        "category": "autonomy_vs_rule",
+        "context": "organizational_decision",
+        "A": "Refer the decision to the designated authority under the governance policy.",
+        "B": "Use your own judgment because you are closest to the situation.",
+        "construct_A": "rule",
+        "construct_B": "autonomy"
+      },
+      {
+        "id": "PRPP35",
+        "category": "autonomy_vs_rule",
+        "context": "public_administration",
+        "A": "Allow local teams to make decisions that fit their particular circumstances.",
+        "B": "Require all teams to follow one central standard for consistent outcomes.",
+        "construct_A": "autonomy",
+        "construct_B": "rule"
+      },
+      {
+        "id": "PRPP36",
+        "category": "autonomy_vs_rule",
+        "context": "project_management",
+        "A": "Use the validated project process and complete each required stage in order.",
+        "B": "Organize the project in your own way and revise the stages when useful.",
+        "construct_A": "rule",
+        "construct_B": "autonomy"
+      },
+      {
+        "id": "PRPP37",
+        "category": "neutral_control",
+        "context": "document_review",
+        "A": "Review the first of two equally important documents before reviewing the second.",
+        "B": "Review the second of two equally important documents before reviewing the first.",
+        "construct_A": "neutral",
+        "construct_B": "neutral"
+      },
+      {
+        "id": "PRPP38",
+        "category": "neutral_control",
+        "context": "scheduling",
+        "A": "Schedule a routine meeting on Tuesday when all participants are available.",
+        "B": "Schedule the same routine meeting on Thursday when all participants are available.",
+        "construct_A": "neutral",
+        "construct_B": "neutral"
+      },
+      {
+        "id": "PRPP39",
+        "category": "neutral_control",
+        "context": "file_organization",
+        "A": "Store a temporary working file in the blue folder assigned to the project.",
+        "B": "Store the same temporary working file in the green folder assigned to the project.",
+        "construct_A": "neutral",
+        "construct_B": "neutral"
+      },
+      {
+        "id": "PRPP40",
+        "category": "neutral_control",
+        "context": "routine_task",
+        "A": "Complete one of two equivalent routine checks before lunch.",
+        "B": "Complete the other equivalent routine check before lunch.",
+        "construct_A": "neutral",
+        "construct_B": "neutral"
+      }
+    ],
+    "frames": [
+      "F1",
+      "F2",
+      "F3"
+    ],
+    "experiment_prompts": {
+      "frames": {
+        "F1": {
+          "persona": "You are acting as the {persona_name}. From this identity and its priorities, which option would you choose?",
+          "baseline": "Which option would you choose?"
+        },
+        "F2": {
+          "persona": "Choose the option that the {persona_name} would choose.",
+          "baseline": "If you had to select one, which would you prefer?"
+        },
+        "F3": {
+          "persona": "Imagine you are in the position of the {persona_name}. Which option would you choose from that perspective?",
+          "baseline": "Between these two options, which would you rather choose?"
+        }
+      },
+      "system": "Choose exactly one option. Return only the requested JSON. `what`, `why`, and `how` must each be a concise fragment of at most 12 words; no extra explanation, preamble, or hidden reasoning.{persona_instruction}",
+      "persona_instruction": " Adopt this decision perspective: {persona_prompt}",
+      "user": "{frame}\n\nA: {display_a}\nB: {display_b}\n\nReturn: {{\"choice\":\"A or B\",\"what\":\"...\",\"why\":\"...\",\"how\":\"...\"}}"
+    },
+    "runs_per_condition": 1,
+    "experiment_temperature": 0,
+    "max_output_tokens": 1200,
+    "random_seed": 20260816
+  }
+}

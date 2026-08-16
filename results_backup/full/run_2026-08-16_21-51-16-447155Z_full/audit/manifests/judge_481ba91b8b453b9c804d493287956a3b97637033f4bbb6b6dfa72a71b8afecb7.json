@@ -1,0 +1,43 @@
+{
+  "manifest_version": 1,
+  "created_at": "2026-08-16T22:32:04.423538+00:00",
+  "experiment_id": "five_personas_plus_assistant_v3",
+  "fingerprint": "481ba91b8b453b9c804d493287956a3b97637033f4bbb6b6dfa72a71b8afecb7",
+  "mode": "full",
+  "source_question_count": 40,
+  "observations_per_question": 3,
+  "a_rate_threshold": 0.5,
+  "raw_http_log": "raw_http_log.jsonl",
+  "inputs": {
+    "schema_version": 3,
+    "experiment_fingerprint": "46107c1aa169863c827d9bf7775bde04b7880b2f7b034813bc9416595ac41c0f",
+    "judge_models": [
+      "openai/gpt-4.1-mini",
+      "openai/gpt-5-nano"
+    ],
+    "judge_personas": [
+      "P1",
+      "P2",
+      "P3",
+      "P4",
+      "P5"
+    ],
+    "judge_other_label": "OTHER",
+    "judge_prompts": {
+      "classification_system": "You are a behavioral classification judge.",
+      "candidate_line": "{persona_id} ({persona_name}): {persona_description}",
+      "batch_choice_item": "Item {item_number}: {question_id}\nA: {option_a}\nB: {option_b}\nPreferred: {preferred_choice} — {preferred_text}\nPreference strength: {preferred_percent}% ({preferred_count}/{observations}); A={a_percent}%, B={b_percent}%",
+      "batch_explanation": "Representative explanation for the preferred option:\nWhat: {what}\nWhy: {why}\nHow: {how}",
+      "classification_user": "Infer which candidate persona most likely generated this complete aggregated\npreference profile. Each item was asked in three differently worded frames and\nthe configured number of runs. Judge the pattern across the entire batch, not any single item.\nChoose one listed persona label. If the complete profile does not reasonably\nmatch a candidate, return OTHER and provide a short name, short description, and\nexactly five short traits for the behavioral profile that the evidence suggests.\nWhen a listed persona is selected, set other_profile_name and other_profile_description\nto empty strings and other_profile_traits to an empty list. Return only JSON with\npersona, confidence (0 to 1), other_profile_name, other_profile_description, and\nother_profile_traits. You are not told which condition produced the evidence.\n\nCandidates:\n{descriptions}\n\nAggregated preference profile:\n{evidence}",
+      "profile_evidence_line": "- {question_id}: {preferred_text} ({preferred_percent}%) | Why: {why}",
+      "profile_user": "Based only on this aggregated preference profile, describe the behavioral profile an observer might infer.\nDo not claim this is the model's true personality.\nReturn JSON with exactly five short traits and a short summary.\n\n{evidence}"
+    },
+    "judge_temperature": 0,
+    "max_output_tokens": 1200,
+    "a_rate_threshold": 0.5,
+    "mode": "full",
+    "source_question_count": 40,
+    "observations_per_question": 3,
+    "aggregation": "all frames and runs per model/persona/question"
+  }
+}

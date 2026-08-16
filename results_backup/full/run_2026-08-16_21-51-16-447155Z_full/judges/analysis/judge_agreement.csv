@@ -1,0 +1,3 @@
+condition,judge_1,judge_2,agreement,paired_profiles
+choice_and_explanation,openai/gpt-4.1-mini,openai/gpt-5-nano,0.9166666666666666,12
+choice_only,openai/gpt-4.1-mini,openai/gpt-5-nano,0.75,12

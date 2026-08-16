@@ -1,0 +1,11 @@
+model,persona,mean_absolute_a_rate_change,winner_difference_rate,questions
+google/gemini-2.5-flash-lite,P1,0.5166666666666667,0.55,40
+google/gemini-2.5-flash-lite,P2,0.5666666666666667,0.65,40
+google/gemini-2.5-flash-lite,P3,0.5666666666666667,0.625,40
+google/gemini-2.5-flash-lite,P4,0.625,0.7,40
+google/gemini-2.5-flash-lite,P5,0.575,0.65,40
+qwen/qwen3-14b,P1,0.4083333333333333,0.425,40
+qwen/qwen3-14b,P2,0.475,0.525,40
+qwen/qwen3-14b,P3,0.575,0.675,40
+qwen/qwen3-14b,P4,0.5750000000000001,0.675,40
+qwen/qwen3-14b,P5,0.5916666666666667,0.625,40

@@ -48,7 +48,7 @@ runs_per_condition: 1
 experiment_temperature: 0
 judge_temperature: 0
 max_output_tokens: 1200
-judge_max_output_tokens: 1200
+judge_max_output_tokens: 3600
 concurrency: 4
 max_budget_usd: 2.0
 random_seed: 20260816
