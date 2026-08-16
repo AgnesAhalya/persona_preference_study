@@ -38,6 +38,7 @@ cells = [
         import gc
         import hashlib
         import json
+        import re
         from collections import Counter, defaultdict
         from pathlib import Path
 
@@ -110,6 +111,10 @@ cells = [
             if not HAS_CUDA:
                 model.to(DEVICE)
             model.eval()
+            # Deterministic local trial: remove sampling defaults bundled with some models.
+            model.generation_config.do_sample = False
+            for name in ('temperature', 'top_p', 'top_k'):
+                setattr(model.generation_config, name, None)
             return tokenizer, model
 
         def generate_local(tokenizer, model, messages):
@@ -395,16 +400,44 @@ cells = [
                 )
                 parsed = parse_json_safely(raw)
                 parsed_fields = parsed if isinstance(parsed, dict) else {}
-                predicted = parsed_fields.get('persona')
+                labels = config['judge_personas'] + [config['judge_other_label']]
+                raw_persona = str(parsed_fields.get('persona', ''))
+                persona_match = re.search(r'\\b(P[1-5])\\b', raw_persona.upper())
+                raw_upper = raw.strip().upper()
+                if persona_match and persona_match.group(1) in config['judge_personas']:
+                    predicted = persona_match.group(1)
+                elif raw_upper.startswith(config['judge_other_label']):
+                    predicted = config['judge_other_label']
+                else:
+                    # Also accepts bare or prose local outputs such as "P2 (Strategist)".
+                    bare_match = re.search(r'\\b(P[1-5])\\b', raw_upper)
+                    predicted = (
+                        bare_match.group(1)
+                        if bare_match and bare_match.group(1) in config['judge_personas']
+                        else None
+                    )
                 confidence = parsed_fields.get('confidence')
+                if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
+                    confidence = confidence / 100 if 1 < confidence <= 100 else confidence
+                else:
+                    confidence = None
                 other_profile_name = parsed_fields.get('other_profile_name', '')
                 other_profile_description = parsed_fields.get('other_profile_description', '')
-                labels = config['judge_personas'] + [config['judge_other_label']]
+                parse_mode = 'json'
+                if predicted == config['judge_other_label'] and (
+                    not str(other_profile_name).strip() or not str(other_profile_description).strip()
+                ):
+                    # Preserve the complete raw local output instead of inventing a profile.
+                    other_profile_name = 'OTHER (local raw fallback)'
+                    other_profile_description = raw.strip()
+                    parse_mode = 'raw_other_profile'
+                elif predicted in config['judge_personas'] and not isinstance(parsed, dict):
+                    parse_mode = 'bare_persona_label'
+                elif predicted in config['judge_personas'] and raw_persona != predicted:
+                    parse_mode = 'normalized_persona_label'
                 valid = (
                     predicted in labels
-                    and isinstance(confidence, (int, float))
-                    and not isinstance(confidence, bool)
-                    and 0 <= confidence <= 1
+                    and (confidence is None or 0 <= confidence <= 1)
                     and isinstance(other_profile_name, str)
                     and isinstance(other_profile_description, str)
                     and (
@@ -418,7 +451,8 @@ cells = [
                     'judge_model': JUDGE_MODEL, 'condition': condition,
                     'profile_id': profile_id, 'experiment_model': EXPERIMENT_MODEL,
                     'actual_persona': actual_persona, 'predicted_persona': predicted,
-                    'confidence': confidence, 'a_rate_threshold': threshold,
+                    'confidence': confidence, 'parse_mode': parse_mode,
+                    'a_rate_threshold': threshold,
                     'other_profile_name': other_profile_name,
                     'other_profile_description': other_profile_description,
                     'source_questions': len(selected_questions),
@@ -467,6 +501,7 @@ cells = [
             parsed_fields = parsed if isinstance(parsed, dict) else {}
             traits = parsed_fields.get('traits', [])
             summary = parsed_fields.get('summary', '')
+            parse_mode = 'json'
             valid = (
                 isinstance(traits, list)
                 and len(traits) == 5
@@ -474,12 +509,19 @@ cells = [
                 and isinstance(summary, str)
                 and bool(summary.strip())
             )
+            # Keep a non-empty raw local profile as transparent trial evidence when
+            # the small judge cannot obey the full profile JSON schema.
+            if not valid and raw.strip():
+                traits = []
+                summary = raw.strip()
+                parse_mode = 'raw_profile_text'
+                valid = True
             profile_result = {
                 'request_id': profile_request_id, 'experiment_id': TRIAL_ID,
                 'name': 'inferred_default_behavioral_profile',
                 'judge_model': JUDGE_MODEL, 'experiment_model': EXPERIMENT_MODEL,
                 'profile_id': baseline_profile_id, 'traits': traits, 'summary': summary,
-                'a_rate_threshold': threshold,
+                'parse_mode': parse_mode, 'a_rate_threshold': threshold,
                 'source_questions': len(selected_questions),
                 'bucket_questions': len(baseline_items),
                 'raw_output': raw, 'input_tokens': input_tokens,
