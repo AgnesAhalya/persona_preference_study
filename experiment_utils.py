@@ -137,7 +137,7 @@ def judge_fingerprint_inputs(
         "judge_other_label": config["judge_other_label"],
         "judge_prompts": judge_prompts,
         "judge_temperature": config["judge_temperature"],
-        "max_output_tokens": config["max_output_tokens"],
+        "max_output_tokens": config.get("judge_max_output_tokens", config["max_output_tokens"]),
         "a_rate_threshold": threshold,
         "mode": mode,
         "source_question_count": source_question_count,

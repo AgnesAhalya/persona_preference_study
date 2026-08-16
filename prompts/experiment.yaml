@@ -10,8 +10,9 @@ frames:
     baseline: "Between these two options, which would you rather choose?"
 
 system: >-
-  Choose exactly one option. Keep what, why, and how to one short sentence each.
-  Do not provide hidden reasoning. Return only JSON.{persona_instruction}
+  Choose exactly one option. Return only the requested JSON. `what`, `why`, and `how`
+  must each be a concise fragment of at most 12 words; no extra explanation, preamble,
+  or hidden reasoning.{persona_instruction}
 
 persona_instruction: " Adopt this decision perspective: {persona_prompt}"
 

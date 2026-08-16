@@ -23,12 +23,23 @@ from experiment_utils import (
     utc_now,
     write_manifest,
 )
+from results_layout import select_experiment_run, write_run_metadata
 
 
 ROOT = Path(__file__).parent
 RESULTS = ROOT / "results"
 OUTPUT = RESULTS / "experiment.jsonl"
+FAILURE_OUTPUT = RESULTS / "experiment_failures.jsonl"
 RAW_HTTP_LOG = RESULTS / "raw_http_log.jsonl"
+
+
+def configure_results(run_dir):
+    global RESULTS, OUTPUT, FAILURE_OUTPUT, RAW_HTTP_LOG
+    RESULTS = run_dir
+    OUTPUT = RESULTS / "chooser/success/experiment.jsonl"
+    FAILURE_OUTPUT = RESULTS / "chooser/failure/experiment.jsonl"
+    RAW_HTTP_LOG = RESULTS / "audit/raw_http_log.jsonl"
+
 
 CHOICE_SCHEMA = {
     "type": "object",
@@ -73,6 +84,8 @@ def successful_ids():
 
 
 def parse_json(text):
+    if not isinstance(text, str):
+        return None
     text = text.strip()
     try:
         return json.loads(text)
@@ -187,9 +200,11 @@ async def main_async(args):
     if not api_key:
         raise SystemExit("OPENROUTER_API_KEY is missing. Copy .env.example to .env and add it.")
 
-    RESULTS.mkdir(exist_ok=True)
+    configure_results(select_experiment_run(mode, fingerprint))
+    write_run_metadata(RESULTS, created_at=utc_now(), mode=mode, experiment_id=experiment_id, experiment_fingerprint=fingerprint, experiment_complete=False)
+    print(f"Run directory: {RESULTS}")
     write_manifest(
-        RESULTS / "manifests" / f"experiment_{fingerprint}_{mode}.json",
+        RESULTS / "audit/manifests" / f"experiment_{fingerprint}_{mode}.json",
         {
             "manifest_version": 1,
             "created_at": utc_now(),
@@ -205,7 +220,7 @@ async def main_async(args):
     completed = successful_ids()
     initial_cost = recorded_cost(
         RAW_HTTP_LOG,
-        [OUTPUT, RESULTS / "judges.jsonl", RESULTS / "inferred_default_behavioral_profile.jsonl"],
+        [OUTPUT, FAILURE_OUTPUT, RESULTS / "judges/success/judges.jsonl", RESULTS / "judges/success/assistant_profiles.jsonl"],
         experiment_id,
     )
     state = {"cost": initial_cost, "done": 0, "stopped": False}
@@ -254,38 +269,40 @@ async def main_async(args):
                     "temperature": config["experiment_temperature"],
                     "max_tokens": config["max_output_tokens"],
                 }
-                data, error, attempts = await openrouter_request(
-                    client,
-                    payload,
-                    api_key,
-                    request_context={
-                        "experiment_id": experiment_id,
-                        "fingerprint": fingerprint,
-                        "request_id": rid,
-                        "stage": "experiment",
-                        "model": model,
-                    },
-                    schema_name="preference_choice",
-                    schema=CHOICE_SCHEMA,
-                    log_attempt=log_http_attempt,
-                )
-                parsed, usage, model_choice = None, {}, None
-                if data:
-                    usage = data.get("usage") or {}
+                all_attempts = []
+                data = error = parsed = None
+                usage, model_choice, valid = {}, None, False
+                for semantic_attempt in range(1, 4):
+                    async with budget_lock:
+                        if state["cost"] >= float(config["max_budget_usd"]):
+                            state["stopped"] = True
+                            error = "Budget reached before a valid response"
+                            break
+                    data, error, attempts = await openrouter_request(
+                        client, payload, api_key,
+                        request_context={"experiment_id": experiment_id, "fingerprint": fingerprint, "request_id": rid, "stage": "experiment", "model": model, "semantic_attempt": semantic_attempt},
+                        schema_name="preference_choice", schema=CHOICE_SCHEMA, log_attempt=log_http_attempt,
+                    )
+                    all_attempts.extend(attempts)
+                    async with budget_lock:
+                        state["cost"] += attempt_cost(attempts)
+                    usage = (data or {}).get("usage") or {}
                     try:
-                        parsed = parse_json(data["choices"][0]["message"]["content"])
+                        parsed = parse_json(data["choices"][0]["message"]["content"]) if data else None
                     except (KeyError, IndexError, TypeError):
                         parsed = None
                     if isinstance(parsed, dict):
                         model_choice = str(parsed.get("choice", "")).strip().upper()
-                valid = valid_choice_response(parsed)
+                    valid = valid_choice_response(parsed)
+                    if valid:
+                        break
                 parsed_fields = parsed if isinstance(parsed, dict) else {}
                 canonical = (
                     ({"A": "B", "B": "A"}[model_choice] if swapped else model_choice)
                     if valid
                     else None
                 )
-                cost = attempt_cost(attempts)
+                cost = attempt_cost(all_attempts)
                 row = {
                     "request_id": rid,
                     "experiment_id": experiment_id,
@@ -316,8 +333,7 @@ async def main_async(args):
                     "error": error or (None if valid else "Response was not valid choice JSON"),
                 }
                 async with write_lock:
-                    append_jsonl(OUTPUT, row)
-                    state["cost"] += cost
+                    append_jsonl(OUTPUT if valid else FAILURE_OUTPUT, row)
                     state["done"] += 1
                     print(f"{state['done']} / {total} | tracked cost: ${state['cost']:.4f}")
 
@@ -336,8 +352,9 @@ async def main_async(args):
         "budget_stopped": state["stopped"],
         "complete": len(current_successes) == total,
     }
-    completion_path = RESULTS / f"completion_{fingerprint}_{mode}.json"
+    completion_path = RESULTS / "audit/completion" / f"experiment_{fingerprint}_{mode}.json"
     completion_path.write_text(json.dumps(completion, indent=2) + "\n", encoding="utf-8")
+    write_run_metadata(RESULTS, experiment_complete=completion["complete"])
 
     if not completion["complete"]:
         reason = "budget reached" if state["stopped"] else "failed or invalid responses"

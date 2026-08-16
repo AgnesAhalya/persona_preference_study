@@ -10,7 +10,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY config.yaml questions.json experiment_utils.py run_experiment.py run_judges.py analyze.py ./
+COPY config.yaml questions.json experiment_utils.py results_layout.py run_experiment.py run_judges.py analyze.py ./
 COPY prompts/ ./prompts/
 RUN mkdir -p results
 

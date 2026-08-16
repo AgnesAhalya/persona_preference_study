@@ -43,7 +43,7 @@ on:
         required: false
         type: string
       max_budget_usd:
-        description: "Maximum OpenRouter spend in USD (blank = config.yaml)"
+        description: "Spend stop threshold in USD; small in-flight overshoot is possible (blank = config.yaml)"
         required: false
         type: string
 

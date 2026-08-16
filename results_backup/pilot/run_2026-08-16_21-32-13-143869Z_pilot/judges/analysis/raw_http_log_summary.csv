@@ -1,0 +1,5 @@
+stage,model,http_status,attempts,cost,mean_duration_ms
+experiment,google/gemini-2.5-flash-lite,200,36,0.0015618,860.8750277777777
+experiment,qwen/qwen3-14b,200,36,0.00399414,17728.55036111111
+judge_classification,openai/gpt-4.1-mini,200,24,0.006472,1200.3642083333334
+judge_classification,openai/gpt-5-nano,200,30,0.01215245,9698.505733333333

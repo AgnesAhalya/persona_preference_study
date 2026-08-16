@@ -32,23 +32,20 @@ docker compose build
 docker compose run --rm experiment
 ```
 
-Run the 72-request pilot:
+Run the 72-request pilot, then judge and analyze it. The `$0.50` value is the total stop threshold shared by the chooser and judge stages:
 
 ```bash
-docker compose run --rm experiment python run_experiment.py --pilot
+docker compose run --rm -e MAX_BUDGET_USD=0.50 experiment python run_experiment.py --pilot
+docker compose run --rm -e MAX_BUDGET_USD=0.50 experiment python run_judges.py --a-rate-threshold 0.5
+docker compose run --rm experiment python analyze.py --mode pilot --a-rate-threshold 0.5
 ```
 
-Run the default low-resource 1,440-request full experiment:
+Run the default low-resource 1,440-request full experiment, then its judges and analysis. These commands share the `$2.00` total stop threshold:
 
 ```bash
-docker compose run --rm experiment python run_experiment.py
-```
-
-Judge and analyze using the default A-majority bucket:
-
-```bash
-docker compose run --rm experiment python run_judges.py --a-rate-threshold 0.5
-docker compose run --rm experiment python analyze.py --a-rate-threshold 0.5
+docker compose run --rm -e MAX_BUDGET_USD=2.00 experiment python run_experiment.py
+docker compose run --rm -e MAX_BUDGET_USD=2.00 experiment python run_judges.py --a-rate-threshold 0.5
+docker compose run --rm experiment python analyze.py --mode full --a-rate-threshold 0.5
 ```
 
 The judge bucket is configurable:
@@ -63,7 +60,7 @@ There are exactly five prompted personas: Mathematician, Strategist, Contrarian,
 
 ## Raw HTTP logging
 
-Every OpenRouter attempt is appended to `results/raw_http_log.jsonl`, including:
+Every OpenRouter attempt is appended to `results/run_.../audit/raw_http_log.jsonl`, including:
 
 - timestamp, retry number, and duration;
 - exact method, URL, and JSON request body;
@@ -74,7 +71,7 @@ The real `Authorization` value is never logged. It is recorded as `Bearer [REDAC
 
 The log still contains full prompts and model outputs. `results/` is Git-ignored; treat downloaded artifacts as research data and review them before sharing.
 
-Summary result files reference the raw log by filename. Prompt/data fingerprints and immutable run manifests under `results/manifests/` prevent changed prompts or questions from silently reusing stale results.
+Summary result files reference the raw log by filename. Prompt/data fingerprints and immutable run manifests under `results/run_.../audit/manifests/` prevent changed prompts or questions from silently reusing stale results.
 
 ## GitHub Actions
 
@@ -105,18 +102,28 @@ LLM-facing text is separated from the Python programs:
 
 Rebuild the Docker image after changing source, configuration, or prompts.
 
-## Main result files
+## Timestamped result layout
 
-- `experiment.jsonl` — normalized experiment responses
-- `judges.jsonl` — whole-batch persona classifications
-- `inferred_default_behavioral_profile.jsonl` — inferred P0 Assistant profile descriptions
-- `judge_predictions.csv` and `other_profiles.csv` — judge decisions and profiles proposed for `OTHER`
-- `analysis_context.json` — the exact experiment fingerprint, judge fingerprint, and threshold used
-- `raw_http_log.jsonl` — exact redacted HTTP request/response audit log
-- `manifests/*.json` — full input snapshots and fingerprints
-- `completion_*.json` and `judge_completion_*.json` — completeness checks
-- CSV and PNG files — construct preferences, frame/order effects, buckets, accuracy, abstention, and confusion matrices
+Each experiment invocation creates `results/run_YYYY-MM-DD_HH-MM-SS-microsecondsZ_<mode>/`. If that run is incomplete, the same command resumes it through `results/LATEST_RUN`; after completion, the next experiment command starts a new timestamped run. Judge and analysis commands automatically use `LATEST_RUN`.
 
-The mounted `results/` directory makes local Docker runs resumable.
+```text
+run_.../
+  RESULTS_REPORT.md
+  chooser/success/experiment.jsonl
+  chooser/failure/experiment.jsonl
+  chooser/analysis/
+  judges/success/judges.jsonl
+  judges/success/assistant_profiles.jsonl
+  judges/failure/judges.jsonl
+  judges/failure/assistant_profiles.jsonl
+  judges/analysis/
+  audit/raw_http_log.jsonl
+  audit/manifests/
+  audit/completion/
+```
+
+Invalid chooser, judge, and Assistant-profile responses are retried immediately up to three semantic attempts. Only a response that remains invalid after those retries is written under `failure/`. The mounted `results/` directory makes incomplete local Docker runs resumable.
+
+`max_budget_usd` is a spend stop threshold, not a prepaid hard cap: OpenRouter reports cost after a response, and already in-flight requests can finish. Use a conservative value; the scripts check the threshold before every semantic retry.
 
 Analysis is threshold- and mode-specific: `0`, `0.5`, and `1`, as well as pilot and full runs, receive different judge fingerprints. `analyze.py` includes only the requested threshold and mode instead of mixing runs.

@@ -20,10 +20,12 @@ classification_user: |-
   preference profile. Each item was asked in three differently worded frames and
   the configured number of runs. Judge the pattern across the entire batch, not any single item.
   Choose one listed persona label. If the complete profile does not reasonably
-  match a candidate, return OTHER and provide a short name and description for the
-  behavioral profile that the evidence does suggest. When a listed persona is selected, set other_profile_name and
-  other_profile_description to empty strings. Return only JSON with persona,
-  confidence (0 to 1), other_profile_name, and other_profile_description.
+  match a candidate, return OTHER and provide a short name, short description, and
+  exactly five short traits for the behavioral profile that the evidence suggests.
+  When a listed persona is selected, set other_profile_name and other_profile_description
+  to empty strings and other_profile_traits to an empty list. Return only JSON with
+  persona, confidence (0 to 1), other_profile_name, other_profile_description, and
+  other_profile_traits. You are not told which condition produced the evidence.
 
   Candidates:
   {descriptions}

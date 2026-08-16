@@ -23,7 +23,7 @@ from run_judges import (
     valid_behavioral_profile,
     valid_classification,
 )
-from run_experiment import experiment_messages, valid_choice_response
+from run_experiment import experiment_messages, parse_json, valid_choice_response
 
 
 class ThresholdTests(unittest.TestCase):
@@ -62,6 +62,9 @@ class PromptAndClassificationTests(unittest.TestCase):
         self.assertNotIn("Mathematician", assistant[0]["content"])
         self.assertIn("Mathematician", persona[1]["content"])
 
+    def test_parse_json_accepts_null_provider_content(self):
+        self.assertIsNone(parse_json(None))
+
     def test_choice_requires_all_nonempty_fields(self):
         self.assertTrue(valid_choice_response({
             "choice": "A", "what": "Task", "why": "Reason", "how": "Method",
@@ -78,18 +81,21 @@ class PromptAndClassificationTests(unittest.TestCase):
             "confidence": 0.7,
             "other_profile_name": "Care-focused helper",
             "other_profile_description": "Consistently prefers supportive cooperative tasks.",
+            "other_profile_traits": ["caring", "helpful", "patient", "social", "supportive"],
         }, labels, "OTHER"))
         self.assertFalse(valid_classification({
             "persona": "OTHER",
             "confidence": 0.7,
             "other_profile_name": "",
             "other_profile_description": "",
+            "other_profile_traits": [],
         }, labels, "OTHER"))
         self.assertTrue(valid_classification({
             "persona": "P1",
             "confidence": 0.8,
             "other_profile_name": "",
             "other_profile_description": "",
+            "other_profile_traits": [],
         }, labels, "OTHER"))
 
     def test_behavioral_profile_requires_five_nonempty_traits(self):

@@ -1,0 +1,2 @@
+experiment_id,experiment_fingerprint,mode,expected_requests,successful_requests,error_requests,missing_requests,complete
+five_personas_plus_assistant_v3,46107c1aa169863c827d9bf7775bde04b7880b2f7b034813bc9416595ac41c0f,pilot,72,72,0,0,True

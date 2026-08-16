@@ -18,6 +18,7 @@ from experiment_utils import (
     read_jsonl,
 )
 from run_judges import aggregate_task_preferences, build_batches, normalize_threshold
+from results_layout import latest_run_directory
 
 
 ROOT = Path(__file__).parent
@@ -265,15 +266,15 @@ def analyze_frames_and_order(success_rows, config, questions):
         ).to_csv(RESULTS / "neutral_control_position_rates.csv", index=False)
 
 
-def judge_analysis(rows, actual_labels, predicted_labels, other_label):
+def judge_analysis(rows, actual_labels, predicted_labels, other_label, baseline_label=None):
     if not rows:
         pd.DataFrame(columns=[
             "actual_persona", "predicted_persona", "confidence",
-            "other_profile_name", "other_profile_description",
+            "other_profile_name", "other_profile_description", "other_profile_traits",
         ]).to_csv(RESULTS / "judge_predictions.csv", index=False)
         pd.DataFrame(columns=[
             "actual_persona", "predicted_persona", "other_profile_name",
-            "other_profile_description",
+            "other_profile_description", "other_profile_traits",
         ]).to_csv(RESULTS / "other_profiles.csv", index=False)
         pd.DataFrame(columns=[
             "judge_model", "condition", "accuracy", "coverage", "abstention_rate",
@@ -292,6 +293,11 @@ def judge_analysis(rows, actual_labels, predicted_labels, other_label):
     other_profiles = judges[judges["predicted_persona"] == other_label]
     other_profiles.to_csv(RESULTS / "other_profiles.csv", index=False)
     judges["correct"] = judges["actual_persona"] == judges["predicted_persona"]
+    if baseline_label is not None:
+        judges.loc[judges["actual_persona"] == baseline_label, "correct"] = (
+            judges.loc[judges["actual_persona"] == baseline_label, "predicted_persona"]
+            == other_label
+        )
     judges["abstained"] = judges["predicted_persona"] == other_label
     summary_rows = []
     for (judge_model, condition), group in judges.groupby(["judge_model", "condition"]):
@@ -399,8 +405,146 @@ def analyze_http_log(rows, experiment_id, fingerprints):
     pd.DataFrame(summary).to_csv(RESULTS / "raw_http_log_summary.csv", index=False)
 
 
+def write_results_report(
+    run_dir, config, mode, threshold, chooser_rows, judge_rows,
+    experiment_fingerprint, judge_fingerprint,
+):
+    chooser_success_ids = {row.get("request_id") for row in chooser_rows}
+    judge_success_ids = {row.get("request_id") for row in judge_rows}
+    chooser_failures = [
+        row for row in latest_records(read_jsonl(run_dir / "chooser/failure/experiment.jsonl"))
+        if row.get("experiment_fingerprint") == experiment_fingerprint
+        and row.get("request_id") not in chooser_success_ids
+    ]
+    judge_failures = [
+        row for row in latest_records(read_jsonl(run_dir / "judges/failure/judges.jsonl"))
+        if row.get("judge_fingerprint") == judge_fingerprint
+        and row.get("request_id") not in judge_success_ids
+    ]
+    lines = [
+        "# Persona Preference Experiment — Results Report",
+        "",
+        f"- Run folder: `{run_dir.name}`",
+        f"- Mode: `{mode}`",
+        f"- Experiment models: {', '.join(config['experimental_models'])}",
+        f"- Judge models: {', '.join(config['judge_models'])}",
+        f"- A-rate threshold: `{threshold}`",
+        f"- Chooser success records: **{len(chooser_rows)}**",
+        f"- Chooser failure records: **{len(chooser_failures)}**",
+        f"- Judge success records: **{len(judge_rows)}**",
+        f"- Judge failure records: **{len(judge_failures)}**",
+        "",
+        "## Failure records",
+        "",
+    ]
+    if not chooser_failures and not judge_failures:
+        lines.extend(["No terminal failures were recorded after automatic retries.", ""])
+    else:
+        if chooser_failures:
+            lines.extend(["### Chooser failures", ""])
+            for row in chooser_failures[:50]:
+                lines.append(
+                    f"- {row.get('model')} / {row.get('question_id')} / {row.get('persona')} / "
+                    f"{row.get('frame')} / run {row.get('run')}: {row.get('error')}"
+                )
+            if len(chooser_failures) > 50:
+                lines.append(f"- …and {len(chooser_failures) - 50} more; see `chooser/failure/experiment.jsonl`.")
+            lines.append("")
+        if judge_failures:
+            lines.extend(["### Judge classification failures", ""])
+            for row in judge_failures[:50]:
+                lines.append(
+                    f"- {row.get('judge_model')} / actual {row.get('actual_persona')} / "
+                    f"{row.get('condition')}: {row.get('error')}"
+                )
+            if len(judge_failures) > 50:
+                lines.append(f"- …and {len(judge_failures) - 50} more; see `judges/failure/judges.jsonl`.")
+            lines.append("")
+    lines.extend(["## Persona classifications", ""])
+    report_conditions = {
+        config["baseline"]["id"]: {"name": "Assistant (no persona prompt)"},
+        **config["personas"],
+    }
+    for persona_id, details in report_conditions.items():
+        rows = [row for row in judge_rows if row.get("actual_persona") == persona_id]
+        lines.extend([
+            f"### {persona_id} — {details['name']}",
+            "",
+            f"Chooser condition (hidden from judge): **{persona_id}**",
+            "",
+        ])
+        if not rows:
+            lines.extend(["No valid judge result.", ""])
+            continue
+        for judge_model in config["judge_models"]:
+            for condition in ("choice_only", "choice_and_explanation"):
+                grouped_rows = [
+                    row for row in rows
+                    if row.get("judge_model") == judge_model
+                    and row.get("condition") == condition
+                ]
+                lines.append(f"- **{judge_model} / {condition}**")
+                predictions = []
+                for experiment_model in config["experimental_models"]:
+                    matches = [
+                        row for row in grouped_rows
+                        if row.get("experiment_model") == experiment_model
+                    ]
+                    if not matches:
+                        lines.append(f"  - {experiment_model}: no valid result")
+                        continue
+                    row = matches[-1]
+                    confidence = row.get("confidence")
+                    confidence_text = (
+                        f"{float(confidence):.1%}"
+                        if isinstance(confidence, (int, float)) else "not provided"
+                    )
+                    predicted = row.get("predicted_persona")
+                    predictions.append(predicted)
+                    lines.append(
+                        f"  - {experiment_model}: {predicted} (confidence {confidence_text})"
+                    )
+                    if predicted == config["judge_other_label"]:
+                        traits = ", ".join(row.get("other_profile_traits") or [])
+                        lines.append(
+                            f"    - Related profile: {row.get('other_profile_name') or 'Not provided'}"
+                        )
+                        lines.append(f"    - Traits: {traits or 'Not provided'}")
+                        lines.append(
+                            f"    - Description: {row.get('other_profile_description') or 'Not provided'}"
+                        )
+                if len(predictions) > 1:
+                    agreement = (
+                        f"agreement → {predictions[0]}"
+                        if len(set(predictions)) == 1 else "disagreement between experiment models"
+                    )
+                    lines.append(f"  - Combined view: {agreement}")
+        lines.append("")
+    lines.extend([
+        "## How to read the detailed analysis",
+        "",
+        "- [Chooser analysis](chooser/analysis/) — preferences, P0 differences, frames, and order effects.",
+        "- [Judge analysis](judges/analysis/) — accuracy, agreement, confusion matrices, OTHER profiles, and HTTP summary.",
+        "- [Chooser successes](chooser/success/experiment.jsonl) and [chooser failures](chooser/failure/experiment.jsonl).",
+        "- [Judge successes](judges/success/) and [judge failures](judges/failure/).",
+        "- [Audit records](audit/) — raw redacted HTTP logs, manifests, and completion records.",
+        "",
+        "## Interpretation warning",
+        "",
+        "Persona classification accuracy and preference differences are experimental outputs, not proof that a model has a personality. P0 is the no-persona comparison condition.",
+        "",
+    ])
+    (run_dir / "RESULTS_REPORT.md").write_text("\n".join(lines), encoding="utf-8")
+
+
 def main(args):
-    RESULTS.mkdir(exist_ok=True)
+    global RESULTS
+    run_dir = latest_run_directory()
+    chooser_analysis = run_dir / "chooser/analysis"
+    judge_analysis_dir = run_dir / "judges/analysis"
+    chooser_analysis.mkdir(parents=True, exist_ok=True)
+    judge_analysis_dir.mkdir(parents=True, exist_ok=True)
+    RESULTS = chooser_analysis
     with (ROOT / "config.yaml").open(encoding="utf-8") as handle:
         config = apply_runtime_overrides(yaml.safe_load(handle))
     with (ROOT / "questions.json").open(encoding="utf-8") as handle:
@@ -417,7 +561,10 @@ def main(args):
     threshold = normalize_threshold(
         config["judge_a_rate_threshold"] if args.a_rate_threshold is None else args.a_rate_threshold
     )
-    all_experiment_rows = read_jsonl(RESULTS / "experiment.jsonl")
+    all_experiment_rows = (
+        read_jsonl(run_dir / "chooser/failure/experiment.jsonl")
+        + read_jsonl(run_dir / "chooser/success/experiment.jsonl")
+    )
     mode = experiment_completeness(
         all_experiment_rows, config, questions, fingerprint, args.mode
     )
@@ -449,45 +596,39 @@ def main(args):
         print("No successful responses for the current experiment fingerprint.")
 
     judge_rows = matching_successes(
-        read_jsonl(RESULTS / "judges.jsonl"),
+        read_jsonl(run_dir / "judges/success/judges.jsonl"),
         experiment_fingerprint=fingerprint,
         judge_fingerprint=judge_fingerprint,
     )
+    RESULTS = judge_analysis_dir
+    baseline_id = config["baseline"]["id"]
     judge_analysis(
         judge_rows,
-        config["judge_personas"],
+        [baseline_id] + config["judge_personas"],
         config["judge_personas"] + [config["judge_other_label"]],
         config["judge_other_label"],
+        baseline_label=baseline_id,
     )
-
-    default_profiles = matching_successes(
-        read_jsonl(RESULTS / "inferred_default_behavioral_profile.jsonl"),
-        experiment_fingerprint=fingerprint,
-        judge_fingerprint=judge_fingerprint,
-    )
-    if default_profiles:
-        pd.DataFrame(default_profiles).to_csv(RESULTS / "default_behavioral_profiles.csv", index=False)
-    else:
-        pd.DataFrame(columns=[
-            "judge_model", "experiment_model", "traits", "summary", "a_rate_threshold",
-        ]).to_csv(RESULTS / "default_behavioral_profiles.csv", index=False)
     analysis_context = {
         "experiment_id": config["experiment_id"],
         "experiment_fingerprint": fingerprint,
         "judge_fingerprint": judge_fingerprint,
         "a_rate_threshold": threshold,
         "judge_rows": len(judge_rows),
-        "default_profile_rows": len(default_profiles),
     }
     (RESULTS / "analysis_context.json").write_text(
         json.dumps(analysis_context, indent=2) + "\n", encoding="utf-8"
     )
     analyze_http_log(
-        read_jsonl(RESULTS / "raw_http_log.jsonl"),
+        read_jsonl(run_dir / "audit/raw_http_log.jsonl"),
         config["experiment_id"],
         {fingerprint, judge_fingerprint},
     )
-    print(f"Analysis files written to {RESULTS}")
+    write_results_report(
+        run_dir, config, mode, threshold, successful_rows, judge_rows,
+        fingerprint, judge_fingerprint,
+    )
+    print(f"Analysis files written to {run_dir}")
 
 
 if __name__ == "__main__":

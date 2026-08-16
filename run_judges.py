@@ -25,6 +25,7 @@ from experiment_utils import (
     utc_now,
     write_manifest,
 )
+from results_layout import latest_run_directory, write_run_metadata
 
 
 ROOT = Path(__file__).parent
@@ -33,9 +34,24 @@ EXPERIMENT = RESULTS / "experiment.jsonl"
 JUDGES = RESULTS / "judges.jsonl"
 PROFILES = RESULTS / "inferred_default_behavioral_profile.jsonl"
 RAW_HTTP_LOG = RESULTS / "raw_http_log.jsonl"
+JUDGE_FAILURES = RESULTS / "judge_failures.jsonl"
+PROFILE_FAILURES = RESULTS / "profile_failures.jsonl"
+
+
+def configure_results(run_dir):
+    global RESULTS, EXPERIMENT, JUDGES, PROFILES, RAW_HTTP_LOG, JUDGE_FAILURES, PROFILE_FAILURES
+    RESULTS = run_dir
+    EXPERIMENT = RESULTS / "chooser/success/experiment.jsonl"
+    JUDGES = RESULTS / "judges/success/judges.jsonl"
+    PROFILES = RESULTS / "judges/success/assistant_profiles.jsonl"
+    JUDGE_FAILURES = RESULTS / "judges/failure/judges.jsonl"
+    PROFILE_FAILURES = RESULTS / "judges/failure/assistant_profiles.jsonl"
+    RAW_HTTP_LOG = RESULTS / "audit/raw_http_log.jsonl"
 
 
 def parse_json(text):
+    if not isinstance(text, str):
+        return None
     text = text.strip()
     try:
         return json.loads(text)
@@ -73,6 +89,7 @@ def valid_classification(parsed, prediction_labels, other_label):
     confidence = parsed.get("confidence")
     profile_name = parsed.get("other_profile_name")
     profile_description = parsed.get("other_profile_description")
+    profile_traits = parsed.get("other_profile_traits")
     if (
         predicted not in prediction_labels
         or not isinstance(confidence, (int, float))
@@ -80,11 +97,17 @@ def valid_classification(parsed, prediction_labels, other_label):
         or not 0 <= confidence <= 1
         or not isinstance(profile_name, str)
         or not isinstance(profile_description, str)
+        or not isinstance(profile_traits, list)
     ):
         return False
     if predicted == other_label:
-        return bool(profile_name.strip()) and bool(profile_description.strip())
-    return profile_name == "" and profile_description == ""
+        return bool(
+            profile_name.strip()
+            and profile_description.strip()
+            and len(profile_traits) == 5
+            and all(isinstance(trait, str) and trait.strip() for trait in profile_traits)
+        )
+    return profile_name == "" and profile_description == "" and profile_traits == []
 
 
 def valid_behavioral_profile(parsed):
@@ -239,6 +262,8 @@ def classification_prompt(batch, condition, candidates, persona_prompts, prompts
 
 
 async def main(args):
+    configure_results(latest_run_directory())
+    print(f"Run directory: {RESULTS}")
     with (ROOT / "config.yaml").open(encoding="utf-8") as handle:
         config = apply_runtime_overrides(yaml.safe_load(handle))
     with (ROOT / "questions.json").open(encoding="utf-8") as handle:
@@ -250,7 +275,7 @@ async def main(args):
     with (ROOT / config["prompt_files"]["judges"]).open(encoding="utf-8") as handle:
         judge_prompts = yaml.safe_load(handle)
     if not EXPERIMENT.exists():
-        raise SystemExit("results/experiment.jsonl not found. Run run_experiment.py first.")
+        raise SystemExit("Chooser success file not found in the latest run. Run run_experiment.py first.")
 
     threshold = normalize_threshold(
         config["judge_a_rate_threshold"] if args.a_rate_threshold is None else args.a_rate_threshold
@@ -275,14 +300,9 @@ async def main(args):
         )
 
     batches = build_batches(preferences, config, threshold)
-    prompted_batches = [
-        batch for batch in batches if batch["actual_persona"] in config["judge_personas"]
-    ]
-    baseline_id = config["baseline"]["id"]
-    default_batches = [
-        batch for batch in batches
-        if config.get("include_baseline", False) and batch["actual_persona"] == baseline_id
-    ]
+    # Classify every condition, including the no-prompt P0 baseline. The prompt
+    # receives only behavioral evidence; actual_persona is retained solely for scoring.
+    prompted_batches = batches
     prediction_labels = config["judge_personas"] + [config["judge_other_label"]]
     candidates = {persona_id: config["personas"][persona_id] for persona_id in config["judge_personas"]}
 
@@ -305,9 +325,9 @@ async def main(args):
     if not api_key:
         raise SystemExit("OPENROUTER_API_KEY is missing. Copy .env.example to .env and add it.")
 
-    RESULTS.mkdir(exist_ok=True)
+    write_run_metadata(RESULTS, judge_fingerprint=judge_fingerprint, judge_complete=False)
     write_manifest(
-        RESULTS / "manifests" / f"judge_{judge_fingerprint}.json",
+        RESULTS / "audit/manifests" / f"judge_{judge_fingerprint}.json",
         {
             "manifest_version": 1,
             "created_at": utc_now(),
@@ -327,13 +347,8 @@ async def main(args):
         for row in latest_successes(read_jsonl(JUDGES))
         if row.get("judge_fingerprint") == judge_fingerprint
     }
-    existing_profiles = {
-        row["request_id"]
-        for row in latest_successes(read_jsonl(PROFILES))
-        if row.get("judge_fingerprint") == judge_fingerprint
-    }
     initial_cost = recorded_cost(
-        RAW_HTTP_LOG, [EXPERIMENT, JUDGES, PROFILES], experiment_id
+        RAW_HTTP_LOG, [EXPERIMENT, JUDGES, JUDGE_FAILURES, PROFILES, PROFILE_FAILURES], experiment_id
     )
     state = {"cost": initial_cost, "done": 0, "stopped": False}
     result_lock = asyncio.Lock()
@@ -346,6 +361,32 @@ async def main(args):
         async with http_log_lock:
             append_jsonl(RAW_HTTP_LOG, record)
 
+    async def request_until_valid(client, payload, context, schema_name, schema, validator):
+        all_attempts = []
+        data = error = parsed = None
+        for semantic_attempt in range(1, 4):
+            async with budget_lock:
+                if state["cost"] >= float(config["max_budget_usd"]):
+                    state["stopped"] = True
+                    error = "Budget reached before a valid response"
+                    break
+            retry_context = dict(context, semantic_attempt=semantic_attempt)
+            data, error, attempts = await openrouter_request(
+                client, payload, api_key,
+                request_context=retry_context,
+                schema_name=schema_name, schema=schema, log_attempt=log_http_attempt,
+            )
+            all_attempts.extend(attempts)
+            async with budget_lock:
+                state["cost"] += attempt_cost(attempts)
+            try:
+                parsed = parse_json(data["choices"][0]["message"]["content"]) if data else None
+            except (KeyError, IndexError, TypeError):
+                parsed = None
+            if validator(parsed):
+                return data, error, all_attempts, parsed, True
+        return data, error, all_attempts, parsed, False
+
     classification_schema = {
         "type": "object",
         "properties": {
@@ -353,12 +394,19 @@ async def main(args):
             "confidence": {"type": "number", "minimum": 0, "maximum": 1},
             "other_profile_name": {"type": "string"},
             "other_profile_description": {"type": "string"},
+            "other_profile_traits": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+                "minItems": 0,
+                "maxItems": 5,
+            },
         },
         "required": [
             "persona",
             "confidence",
             "other_profile_name",
             "other_profile_description",
+            "other_profile_traits",
         ],
         "additionalProperties": False,
     }
@@ -393,35 +441,21 @@ async def main(args):
                         )},
                     ],
                     "temperature": config["judge_temperature"],
-                    "max_tokens": config["max_output_tokens"],
+                    "max_tokens": config.get("judge_max_output_tokens", config["max_output_tokens"]),
                 }
-                data, error, attempts = await openrouter_request(
-                    client,
-                    payload,
-                    api_key,
-                    request_context={
-                        "experiment_id": experiment_id,
-                        "fingerprint": judge_fingerprint,
-                        "request_id": rid,
-                        "stage": "judge_classification",
-                        "model": judge,
-                    },
-                    schema_name="judge_result",
-                    schema=classification_schema,
-                    log_attempt=log_http_attempt,
+                data, error, attempts, parsed, valid = await request_until_valid(
+                    client, payload,
+                    {"experiment_id": experiment_id, "fingerprint": judge_fingerprint, "request_id": rid, "stage": "judge_classification", "model": judge},
+                    "judge_result", classification_schema,
+                    lambda value: valid_classification(value, prediction_labels, config["judge_other_label"]),
                 )
-                try:
-                    parsed = parse_json(data["choices"][0]["message"]["content"]) if data else None
-                except (KeyError, IndexError, TypeError):
-                    parsed = None
                 parsed_fields = parsed if isinstance(parsed, dict) else {}
                 predicted = parsed_fields.get("persona")
                 confidence = parsed_fields.get("confidence")
                 other_profile_name = parsed_fields.get("other_profile_name", "")
                 other_profile_description = parsed_fields.get("other_profile_description", "")
-                valid = valid_classification(
-                    parsed, prediction_labels, config["judge_other_label"]
-                )
+                other_profile_traits = parsed_fields.get("other_profile_traits", [])
+                valid = valid
                 usage = (data or {}).get("usage") or {}
                 result = {
                     "request_id": rid,
@@ -437,6 +471,7 @@ async def main(args):
                     "confidence": confidence,
                     "other_profile_name": other_profile_name,
                     "other_profile_description": other_profile_description,
+                    "other_profile_traits": other_profile_traits,
                     "a_rate_threshold": threshold,
                     "source_questions": batch["all_item_count"],
                     "bucket_questions": len(batch["items"]),
@@ -449,105 +484,16 @@ async def main(args):
                     "error": error or (None if valid else "Response was not valid judge JSON"),
                 }
                 async with result_lock:
-                    append_jsonl(JUDGES, result)
-                    state["cost"] += result["cost"]
+                    append_jsonl(JUDGES if valid else JUDGE_FAILURES, result)
                     state["done"] += 1
                     print(f"{state['done']} / {len(jobs)} | tracked cost: ${state['cost']:.4f}")
 
         await asyncio.gather(*(judge_one(job) for job in jobs))
 
-        profile_schema = {
-            "type": "object",
-            "properties": {
-                "traits": {
-                    "type": "array",
-                    "items": {"type": "string", "minLength": 1},
-                    "minItems": 5,
-                    "maxItems": 5,
-                },
-                "summary": {"type": "string", "minLength": 1},
-            },
-            "required": ["traits", "summary"],
-            "additionalProperties": False,
-        }
-        for judge in config["judge_models"]:
-            for batch in default_batches:
-                rid = hashlib.sha256(
-                    f"{judge_fingerprint}|default-profile|{judge}|{batch['profile_id']}".encode()
-                ).hexdigest()[:20]
-                expected_ids.add(rid)
-                if rid in existing_profiles:
-                    continue
-                if state["cost"] >= float(config["max_budget_usd"]):
-                    state["stopped"] = True
-                    continue
-                lines = [
-                    judge_prompts["profile_evidence_line"].format(
-                        question_id=item["question_id"],
-                        preferred_text=item["preferred_text"],
-                        preferred_percent=round(item["preferred_rate"] * 100, 1),
-                        why=item["why"],
-                    )
-                    for item in batch["items"]
-                ]
-                evidence = "\n".join(lines) or "No questions met the configured A-rate threshold."
-                payload = {
-                    "model": judge,
-                    "messages": [{
-                        "role": "user",
-                        "content": judge_prompts["profile_user"].format(evidence=evidence),
-                    }],
-                    "temperature": config["judge_temperature"],
-                    "max_tokens": config["max_output_tokens"],
-                }
-                data, error, attempts = await openrouter_request(
-                    client,
-                    payload,
-                    api_key,
-                    request_context={
-                        "experiment_id": experiment_id,
-                        "fingerprint": judge_fingerprint,
-                        "request_id": rid,
-                        "stage": "default_profile",
-                        "model": judge,
-                    },
-                    schema_name="default_profile",
-                    schema=profile_schema,
-                    log_attempt=log_http_attempt,
-                )
-                try:
-                    parsed = parse_json(data["choices"][0]["message"]["content"]) if data else None
-                except (KeyError, IndexError, TypeError):
-                    parsed = None
-                valid = valid_behavioral_profile(parsed)
-                parsed_fields = parsed if isinstance(parsed, dict) else {}
-                usage = (data or {}).get("usage") or {}
-                result = {
-                    "request_id": rid,
-                    "experiment_id": experiment_id,
-                    "experiment_fingerprint": experiment_fingerprint,
-                    "judge_fingerprint": judge_fingerprint,
-                    "name": "inferred_default_behavioral_profile",
-                    "judge_model": judge,
-                    "experiment_model": batch["model"],
-                    "traits": parsed_fields.get("traits", []),
-                    "summary": parsed_fields.get("summary", ""),
-                    "a_rate_threshold": threshold,
-                    "source_questions": batch["all_item_count"],
-                    "bucket_questions": len(batch["items"]),
-                    "input_tokens": usage.get("prompt_tokens", 0),
-                    "output_tokens": usage.get("completion_tokens", 0),
-                    "cost": attempt_cost(attempts),
-                    "raw_http_log": RAW_HTTP_LOG.name,
-                    "status": "success" if valid else "error",
-                    "error": error or (None if valid else "Response was not valid profile JSON"),
-                }
-                append_jsonl(PROFILES, result)
-                state["cost"] += result["cost"]
 
     successful = {
         row["request_id"]
-        for row in latest_successes(read_jsonl(JUDGES) + read_jsonl(PROFILES))
+        for row in latest_successes(read_jsonl(JUDGES))
         if row.get("judge_fingerprint") == judge_fingerprint
     }
     completion = {
@@ -563,8 +509,9 @@ async def main(args):
         "budget_stopped": state["stopped"],
         "complete": expected_ids <= successful,
     }
-    completion_path = RESULTS / f"judge_completion_{judge_fingerprint}.json"
+    completion_path = RESULTS / "audit/completion" / f"judge_{judge_fingerprint}.json"
     completion_path.write_text(json.dumps(completion, indent=2) + "\n", encoding="utf-8")
+    write_run_metadata(RESULTS, judge_complete=completion["complete"])
     if not completion["complete"]:
         raise SystemExit(
             f"Judge run incomplete ({completion['successful_requests']}/{completion['expected_requests']}). "

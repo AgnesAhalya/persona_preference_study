@@ -1,0 +1,7 @@
+{
+  "experiment_id": "five_personas_plus_assistant_v3",
+  "experiment_fingerprint": "46107c1aa169863c827d9bf7775bde04b7880b2f7b034813bc9416595ac41c0f",
+  "judge_fingerprint": "0d02fa9009e6af7b5fabb996ec67b07f4ab97d1ab6281a89b275e8009579551b",
+  "a_rate_threshold": 0.5,
+  "judge_rows": 48
+}

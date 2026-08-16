@@ -1,0 +1,13 @@
+model,persona,mean_preference_strength,unanimous_question_rate,questions
+google/gemini-2.5-flash-lite,P0,1.0,1.0,2
+google/gemini-2.5-flash-lite,P1,1.0,1.0,2
+google/gemini-2.5-flash-lite,P2,0.8333333333333333,0.5,2
+google/gemini-2.5-flash-lite,P3,0.8333333333333333,0.5,2
+google/gemini-2.5-flash-lite,P4,0.8333333333333333,0.5,2
+google/gemini-2.5-flash-lite,P5,0.6666666666666666,0.0,2
+qwen/qwen3-14b,P0,1.0,1.0,2
+qwen/qwen3-14b,P1,1.0,1.0,2
+qwen/qwen3-14b,P2,0.8333333333333333,0.5,2
+qwen/qwen3-14b,P3,1.0,1.0,2
+qwen/qwen3-14b,P4,1.0,1.0,2
+qwen/qwen3-14b,P5,0.8333333333333333,0.5,2

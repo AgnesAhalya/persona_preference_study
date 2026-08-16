@@ -1,0 +1,13 @@
+model,persona,AB,BA,order_effect_AB_minus_BA
+google/gemini-2.5-flash-lite,P0,0.0,0.0,0.0
+google/gemini-2.5-flash-lite,P1,0.5,0.5,0.0
+google/gemini-2.5-flash-lite,P2,1.0,0.6,0.4
+google/gemini-2.5-flash-lite,P3,0.0,0.25,-0.25
+google/gemini-2.5-flash-lite,P4,1.0,0.0,1.0
+google/gemini-2.5-flash-lite,P5,1.0,0.0,1.0
+qwen/qwen3-14b,P0,0.0,0.0,0.0
+qwen/qwen3-14b,P1,0.6666666666666666,0.3333333333333333,0.3333333333333333
+qwen/qwen3-14b,P2,1.0,0.6666666666666666,0.33333333333333337
+qwen/qwen3-14b,P3,0.0,0.0,0.0
+qwen/qwen3-14b,P4,1.0,1.0,0.0
+qwen/qwen3-14b,P5,0.3333333333333333,0.3333333333333333,0.0

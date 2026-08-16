@@ -1,0 +1,12 @@
+{
+  "reported_at": "2026-08-16T21:35:10.515261+00:00",
+  "experiment_id": "five_personas_plus_assistant_v3",
+  "fingerprint": "46107c1aa169863c827d9bf7775bde04b7880b2f7b034813bc9416595ac41c0f",
+  "mode": "pilot",
+  "expected_requests": 72,
+  "successful_requests": 72,
+  "missing_requests": 0,
+  "tracked_cost_usd": 0.00555594,
+  "budget_stopped": false,
+  "complete": true
+}

@@ -4,6 +4,7 @@ services:
     image: preference-experiment:local
     environment:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      MAX_BUDGET_USD: ${MAX_BUDGET_USD:-}
     volumes:
       - ./results:/app/results
     command: ["python", "run_experiment.py", "--dry-run"]

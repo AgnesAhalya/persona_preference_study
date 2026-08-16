@@ -103,7 +103,7 @@ Each question average uses three observations. Setting `runs_per_condition: 3` c
 
 ## Raw HTTP audit log and backup behavior
 
-`results/raw_http_log.jsonl` is append-only. A line is written immediately after every HTTP attempt, including retries and structured-output fallback requests. Each line stores the exact JSON body sent and the raw response body received. The API key is replaced with `[REDACTED]`.
+`results/run_.../audit/raw_http_log.jsonl` is append-only. A line is written immediately after every HTTP attempt, including retries and structured-output fallback requests. Each line stores the exact JSON body sent and the raw response body received. The API key is replaced with `[REDACTED]`.
 
 Normalized output files remain easier to analyze, while the raw log supports audits and reparsing. Manifests store all experiment inputs and a SHA-256 fingerprint. Request IDs include that fingerprint, so changing questions, prompts, frames, temperatures, or model configuration creates new IDs instead of reusing incompatible responses.
 
