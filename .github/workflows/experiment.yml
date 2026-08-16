@@ -26,6 +26,26 @@ on:
           - "0"
           - "0.5"
           - "1"
+      experiment_model_1:
+        description: "Experiment model 1 (blank = config.yaml)"
+        required: false
+        type: string
+      experiment_model_2:
+        description: "Experiment model 2 (blank = config.yaml)"
+        required: false
+        type: string
+      judge_model_1:
+        description: "Judge model 1 (blank = config.yaml)"
+        required: false
+        type: string
+      judge_model_2:
+        description: "Judge model 2 (blank = config.yaml)"
+        required: false
+        type: string
+      max_budget_usd:
+        description: "Maximum OpenRouter spend in USD (blank = config.yaml)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -37,6 +57,11 @@ jobs:
     env:
       IMAGE_NAME: preference-experiment
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EXPERIMENT_MODEL_1: ${{ inputs.experiment_model_1 }}
+      EXPERIMENT_MODEL_2: ${{ inputs.experiment_model_2 }}
+      JUDGE_MODEL_1: ${{ inputs.judge_model_1 }}
+      JUDGE_MODEL_2: ${{ inputs.judge_model_2 }}
+      MAX_BUDGET_USD: ${{ inputs.max_budget_usd }}
 
     steps:
       - name: Check out repository
@@ -60,6 +85,11 @@ jobs:
 
           docker run --rm \
             --env OPENROUTER_API_KEY \
+            --env EXPERIMENT_MODEL_1 \
+            --env EXPERIMENT_MODEL_2 \
+            --env JUDGE_MODEL_1 \
+            --env JUDGE_MODEL_2 \
+            --env MAX_BUDGET_USD \
             --volume "$PWD/results:/app/results" \
             "$IMAGE_NAME" python run_experiment.py "${mode_args[@]}"
 
@@ -68,6 +98,11 @@ jobs:
         run: |
           docker run --rm \
             --env OPENROUTER_API_KEY \
+            --env EXPERIMENT_MODEL_1 \
+            --env EXPERIMENT_MODEL_2 \
+            --env JUDGE_MODEL_1 \
+            --env JUDGE_MODEL_2 \
+            --env MAX_BUDGET_USD \
             --volume "$PWD/results:/app/results" \
             "$IMAGE_NAME" python run_judges.py \
             --a-rate-threshold "${{ inputs.judge_a_rate_threshold }}"
@@ -76,6 +111,11 @@ jobs:
         if: ${{ always() && inputs.mode != 'dry-run' }}
         run: |
           docker run --rm \
+            --env EXPERIMENT_MODEL_1 \
+            --env EXPERIMENT_MODEL_2 \
+            --env JUDGE_MODEL_1 \
+            --env JUDGE_MODEL_2 \
+            --env MAX_BUDGET_USD \
             --volume "$PWD/results:/app/results" \
             "$IMAGE_NAME" python analyze.py \
             --mode "${{ inputs.mode }}" \

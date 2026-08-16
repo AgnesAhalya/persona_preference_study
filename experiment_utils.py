@@ -1,6 +1,8 @@
 import asyncio
+import copy
 import hashlib
 import json
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,6 +12,32 @@ import httpx
 
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 RETRY_CODES = {429, 500, 502, 503, 504}
+
+
+def apply_runtime_overrides(config, environ=None):
+    """Apply optional environment overrides without editing config.yaml."""
+    values = os.environ if environ is None else environ
+    updated = copy.deepcopy(config)
+    overrides = (
+        ("EXPERIMENT_MODEL_1", "experimental_models", 0),
+        ("EXPERIMENT_MODEL_2", "experimental_models", 1),
+        ("JUDGE_MODEL_1", "judge_models", 0),
+        ("JUDGE_MODEL_2", "judge_models", 1),
+    )
+    for environment_name, config_key, index in overrides:
+        value = values.get(environment_name, "").strip()
+        if value:
+            updated[config_key][index] = value
+
+    budget = values.get("MAX_BUDGET_USD", "").strip()
+    if budget:
+        try:
+            updated["max_budget_usd"] = float(budget)
+        except ValueError as error:
+            raise ValueError("MAX_BUDGET_USD must be a positive number.") from error
+        if updated["max_budget_usd"] <= 0:
+            raise ValueError("MAX_BUDGET_USD must be a positive number.")
+    return updated
 
 
 def utc_now():

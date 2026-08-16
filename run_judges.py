@@ -11,6 +11,7 @@ import yaml
 from dotenv import load_dotenv
 
 from experiment_utils import (
+    apply_runtime_overrides,
     append_jsonl,
     attempt_cost,
     canonical_hash,
@@ -239,7 +240,7 @@ def classification_prompt(batch, condition, candidates, persona_prompts, prompts
 
 async def main(args):
     with (ROOT / "config.yaml").open(encoding="utf-8") as handle:
-        config = yaml.safe_load(handle)
+        config = apply_runtime_overrides(yaml.safe_load(handle))
     with (ROOT / "questions.json").open(encoding="utf-8") as handle:
         questions = json.load(handle)
     with (ROOT / config["prompt_files"]["personas"]).open(encoding="utf-8") as handle:

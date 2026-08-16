@@ -8,6 +8,7 @@ import pandas as pd
 import yaml
 
 from experiment_utils import (
+    apply_runtime_overrides,
     canonical_hash,
     experiment_conditions,
     experiment_fingerprint_inputs,
@@ -401,7 +402,7 @@ def analyze_http_log(rows, experiment_id, fingerprints):
 def main(args):
     RESULTS.mkdir(exist_ok=True)
     with (ROOT / "config.yaml").open(encoding="utf-8") as handle:
-        config = yaml.safe_load(handle)
+        config = apply_runtime_overrides(yaml.safe_load(handle))
     with (ROOT / "questions.json").open(encoding="utf-8") as handle:
         questions = json.load(handle)
     with (ROOT / config["prompt_files"]["personas"]).open(encoding="utf-8") as handle:

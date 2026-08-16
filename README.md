@@ -82,7 +82,10 @@ Summary result files reference the raw log by filename. Prompt/data fingerprints
 2. Add `OPENROUTER_API_KEY` under **Settings → Secrets and variables → Actions**.
 3. Open **Actions → Run preference experiment → Run workflow**.
 4. Select `dry-run`, `pilot`, or `full`, whether to run judges, and the judge A-rate threshold.
-5. Download the `preference-results-*` artifact.
+5. Optionally enter two experiment-model IDs, two judge-model IDs, and a maximum USD budget. Blank fields use `config.yaml`.
+6. Download the `preference-results-*` artifact.
+
+Keep `OPENROUTER_API_KEY` only in GitHub Secrets. The workflow form never asks for or displays it.
 
 The workflow defaults to dry-run and sends no API requests. Real runs fail visibly when responses are missing or the budget stops the experiment; judges will not run on an incomplete batch. Artifacts are still uploaded for diagnosis.
 
