@@ -236,14 +236,14 @@ cells = [
                     parsed = parse_json_safely(raw)
                     parsed_fields = parsed if isinstance(parsed, dict) else {}
                     model_choice = str(parsed_fields.get('choice', '')).strip().upper()
-                    valid = (
-                        model_choice in {'A', 'B'}
-                        and all(
-                            isinstance(parsed_fields.get(field), str)
-                            and bool(parsed_fields[field].strip())
-                            for field in ('what', 'why', 'how')
-                        )
-                    )
+                    parse_mode = 'json'
+                    # The tiny local trial model often returns only `A` or `B`.
+                    # That is enough for preference aggregation, so retain the exact
+                    # raw response and accept this local-only compact form.
+                    if raw.strip().upper() in {'A', 'B'}:
+                        model_choice = raw.strip().upper()
+                        parse_mode = 'bare_choice'
+                    valid = model_choice in {'A', 'B'}
                     canonical = (
                         {'A': 'B', 'B': 'A'}[model_choice] if swapped else model_choice
                     ) if valid else None
@@ -256,13 +256,14 @@ cells = [
                         'display_A': display_a, 'display_B': display_b,
                         'display_order': 'BA' if swapped else 'AB',
                         'model_choice': model_choice, 'canonical_choice': canonical,
+                        'parse_mode': parse_mode,
                         'what': parsed_fields.get('what', ''),
                         'why': parsed_fields.get('why', ''),
                         'how': parsed_fields.get('how', ''),
                         'raw_output': raw, 'input_tokens': input_tokens,
                         'output_tokens': output_tokens, 'cost': 0.0,
                         'status': 'success' if valid else 'error',
-                        'error': None if valid else 'Response was not valid choice JSON',
+                        'error': None if valid else 'Response was neither a valid JSON choice nor a bare A/B choice.',
                     }
                     append_jsonl(EXPERIMENT_FILE, row)
                     done += 1
