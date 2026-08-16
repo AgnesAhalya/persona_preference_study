@@ -2,71 +2,73 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import random
 from pathlib import Path
 
 import httpx
 import yaml
 from dotenv import load_dotenv
-import os
+
+from experiment_utils import (
+    append_jsonl,
+    attempt_cost,
+    canonical_hash,
+    experiment_conditions,
+    experiment_fingerprint_inputs,
+    openrouter_request,
+    read_jsonl,
+    recorded_cost,
+    utc_now,
+    write_manifest,
+)
 
 
 ROOT = Path(__file__).parent
 RESULTS = ROOT / "results"
 OUTPUT = RESULTS / "experiment.jsonl"
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
-RETRY_CODES = {429, 500, 502, 503, 504}
+RAW_HTTP_LOG = RESULTS / "raw_http_log.jsonl"
+
+CHOICE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "choice": {"type": "string", "enum": ["A", "B"]},
+        "what": {"type": "string", "minLength": 1},
+        "why": {"type": "string", "minLength": 1},
+        "how": {"type": "string", "minLength": 1},
+    },
+    "required": ["choice", "what", "why", "how"],
+    "additionalProperties": False,
+}
 
 
 def load_inputs():
-    with open(ROOT / "config.yaml", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
-    with open(ROOT / "questions.json", encoding="utf-8") as f:
-        questions = json.load(f)
-    with open(ROOT / config["prompt_files"]["personas"], encoding="utf-8") as f:
-        persona_prompts = yaml.safe_load(f)
-    with open(ROOT / config["prompt_files"]["experiment"], encoding="utf-8") as f:
-        experiment_prompts = yaml.safe_load(f)
+    with (ROOT / "config.yaml").open(encoding="utf-8") as handle:
+        config = yaml.safe_load(handle)
+    with (ROOT / "questions.json").open(encoding="utf-8") as handle:
+        questions = json.load(handle)
+    with (ROOT / config["prompt_files"]["personas"]).open(encoding="utf-8") as handle:
+        persona_prompts = yaml.safe_load(handle)
+    with (ROOT / config["prompt_files"]["experiment"]).open(encoding="utf-8") as handle:
+        experiment_prompts = yaml.safe_load(handle)
     return config, questions, persona_prompts, experiment_prompts
 
 
-def request_id(experiment_id, model, question_id, persona, frame, run):
-    raw = f"{experiment_id}|{model}|{question_id}|{persona}|{frame}|{run}"
+def request_id(fingerprint, model, question_id, persona, frame, run):
+    raw = f"{fingerprint}|{model}|{question_id}|{persona}|{frame}|{run}"
     return hashlib.sha256(raw.encode()).hexdigest()[:20]
 
 
 def should_swap(seed, request_id_value):
-    rng = random.Random(f"{seed}:{request_id_value}")
-    return rng.choice([False, True])
+    return random.Random(f"{seed}:{request_id_value}").choice([False, True])
 
 
-def successful_ids(experiment_id):
-    found = set()
-    if not OUTPUT.exists():
-        return found
-    with open(OUTPUT, encoding="utf-8") as f:
-        for line in f:
-            try:
-                row = json.loads(line)
-                if row.get("status") == "success" and row.get("experiment_id") == experiment_id:
-                    found.add(row["request_id"])
-            except (json.JSONDecodeError, KeyError):
-                pass
-    return found
-
-
-def tracked_cost(experiment_id):
-    total = 0.0
-    if OUTPUT.exists():
-        with open(OUTPUT, encoding="utf-8") as f:
-            for line in f:
-                try:
-                    row = json.loads(line)
-                    if row.get("status") == "success" and row.get("experiment_id") == experiment_id:
-                        total += float(row.get("cost") or 0)
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    pass
-    return total
+def successful_ids():
+    return {
+        row["request_id"]
+        for row in read_jsonl(OUTPUT)
+        if row.get("status") == "success" and row.get("request_id")
+    }
 
 
 def parse_json(text):
@@ -79,78 +81,95 @@ def parse_json(text):
             try:
                 return json.loads(text[start : end + 1])
             except json.JSONDecodeError:
-                return None
+                pass
     return None
 
 
-def extract_cost(data):
-    usage = data.get("usage") or {}
-    return float(usage.get("cost") or usage.get("total_cost") or 0)
+def valid_choice_response(parsed):
+    return bool(
+        isinstance(parsed, dict)
+        and str(parsed.get("choice", "")).strip().upper() in {"A", "B"}
+        and all(
+            isinstance(parsed.get(field), str) and bool(parsed[field].strip())
+            for field in ("what", "why", "how")
+        )
+    )
 
 
-async def openrouter_request(client, payload, api_key):
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    structured = True
-    last_error = "unknown error"
-    for attempt in range(5):
-        body = dict(payload)
-        if structured:
-            body["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "preference_choice",
-                    "strict": True,
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "choice": {"type": "string", "enum": ["A", "B"]},
-                            "what": {"type": "string"},
-                            "why": {"type": "string"},
-                            "how": {"type": "string"},
-                        },
-                        "required": ["choice", "what", "why", "how"],
-                        "additionalProperties": False,
-                    },
-                },
-            }
-        try:
-            response = await client.post(API_URL, headers=headers, json=body)
-            if response.status_code == 400 and structured:
-                structured = False
-                last_error = "structured output unsupported; retrying without it"
-                continue
-            if response.status_code in RETRY_CODES:
-                last_error = f"HTTP {response.status_code}: {response.text[:300]}"
-                if attempt < 4:
-                    await asyncio.sleep(0.5 * (2**attempt))
-                    continue
-            response.raise_for_status()
-            return response.json(), None
-        except (httpx.HTTPError, json.JSONDecodeError) as exc:
-            last_error = str(exc)
-            if attempt < 4:
-                await asyncio.sleep(0.5 * (2**attempt))
-    return None, last_error
+def experiment_messages(persona_prompt, experiment_prompts, frame_text, display_a, display_b):
+    user = experiment_prompts["user"].format(
+        frame=frame_text,
+        display_a=display_a,
+        display_b=display_b,
+    )
+    if not persona_prompt:
+        return [{"role": "user", "content": user}]
+    persona_instruction = experiment_prompts["persona_instruction"].format(
+        persona_prompt=persona_prompt
+    )
+    system = experiment_prompts["system"].format(persona_instruction=persona_instruction)
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+def validate_configuration(config, persona_prompts, experiment_prompts):
+    if not config.get("include_baseline", False):
+        raise SystemExit("This design requires the no-system-prompt Assistant condition.")
+    if list(config["personas"]) != ["P1", "P2", "P3", "P4", "P5"]:
+        raise SystemExit("personas must contain exactly P1-P5 in order.")
+    configured_prompt_ids = set(config["personas"]) | {config["baseline"]["id"]}
+    if configured_prompt_ids != set(persona_prompts):
+        raise SystemExit("Persona/baseline IDs in config.yaml and prompts/personas.yaml do not match.")
+    if set(config["judge_personas"]) != set(config["personas"]):
+        raise SystemExit("judge_personas must contain exactly the five prompted persona IDs.")
+    if config["baseline"]["id"] in config["judge_personas"]:
+        raise SystemExit("The no-prompt Assistant must not be a judge persona candidate.")
+    if persona_prompts[config["baseline"]["id"]]["prompt"]:
+        raise SystemExit("The Assistant baseline prompt must be empty.")
+    missing_frames = set(config["frames"]) - set(experiment_prompts["frames"])
+    if missing_frames:
+        raise SystemExit(f"Missing frame prompts: {sorted(missing_frames)}")
+    runs = int(config["runs_per_condition"])
+    if runs < 1 or runs % 2 == 0:
+        raise SystemExit("runs_per_condition must be a positive odd number so majority votes cannot tie.")
 
 
 async def main_async(args):
     config, questions, persona_prompts, experiment_prompts = load_inputs()
+    validate_configuration(config, persona_prompts, experiment_prompts)
+    fingerprint_source = experiment_fingerprint_inputs(
+        config, questions, persona_prompts, experiment_prompts
+    )
+    fingerprint = canonical_hash(fingerprint_source)
     experiment_id = config["experiment_id"]
     models = config["experimental_models"]
     personas = config["personas"]
+    conditions = experiment_conditions(config)
     frames = {frame_id: experiment_prompts["frames"][frame_id] for frame_id in config["frames"]}
+    mode = "pilot" if args.pilot else "full"
     runs = 1 if args.pilot else int(config["runs_per_condition"])
     selected_questions = questions[:2] if args.pilot else questions
-    total = len(models) * len(selected_questions) * len(personas) * len(frames) * runs
+    total = len(models) * len(selected_questions) * len(conditions) * len(frames) * runs
 
     if args.dry_run:
+        print(f"mode: {mode}")
+        print(f"fingerprint: {fingerprint}")
         print(f"models: {len(models)} ({', '.join(models)})")
         print(f"questions: {len(selected_questions)}")
         print(f"personas: {len(personas)}")
+        print(f"no-prompt baseline: {'enabled' if config.get('include_baseline') else 'disabled'}")
+        print(f"total conditions: {len(conditions)}")
         print(f"frames: {len(frames)}")
         print(f"runs: {runs}")
         print(f"total requests: {total}")
+        print("API requests sent: 0")
         return
+
+    placeholders = [model for model in models if model.startswith("MODEL_")]
+    if placeholders:
+        raise SystemExit(f"Replace model placeholders in config.yaml: {', '.join(placeholders)}")
 
     load_dotenv(ROOT / ".env")
     api_key = os.getenv("OPENROUTER_API_KEY")
@@ -158,18 +177,45 @@ async def main_async(args):
         raise SystemExit("OPENROUTER_API_KEY is missing. Copy .env.example to .env and add it.")
 
     RESULTS.mkdir(exist_ok=True)
-    completed = successful_ids(experiment_id)
-    state = {"cost": tracked_cost(experiment_id), "done": 0, "stopped": False}
+    write_manifest(
+        RESULTS / "manifests" / f"experiment_{fingerprint}_{mode}.json",
+        {
+            "manifest_version": 1,
+            "created_at": utc_now(),
+            "experiment_id": experiment_id,
+            "fingerprint": fingerprint,
+            "mode": mode,
+            "expected_requests": total,
+            "raw_http_log": RAW_HTTP_LOG.name,
+            "inputs": fingerprint_source,
+        },
+    )
+
+    completed = successful_ids()
+    initial_cost = recorded_cost(
+        RAW_HTTP_LOG,
+        [OUTPUT, RESULTS / "judges.jsonl", RESULTS / "inferred_default_behavioral_profile.jsonl"],
+        experiment_id,
+    )
+    state = {"cost": initial_cost, "done": 0, "stopped": False}
     write_lock = asyncio.Lock()
+    http_log_lock = asyncio.Lock()
     budget_lock = asyncio.Lock()
     semaphore = asyncio.Semaphore(int(config["concurrency"]))
     jobs = []
+    expected_ids = set()
+
+    async def log_http_attempt(record):
+        async with http_log_lock:
+            append_jsonl(RAW_HTTP_LOG, record)
+
     for model in models:
         for question in selected_questions:
-            for persona_id, persona in personas.items():
+            for persona_id, persona in conditions.items():
                 for frame_id, frame_text in frames.items():
                     for run in range(1, runs + 1):
-                        rid = request_id(experiment_id, model, question["id"], persona_id, frame_id, run)
+                        rid = request_id(fingerprint, model, question["id"], persona_id, frame_id, run)
+                        expected_ids.add(rid)
                         jobs.append((rid, model, question, persona_id, persona, frame_id, frame_text, run))
 
     async with httpx.AsyncClient(timeout=60) as client:
@@ -189,20 +235,29 @@ async def main_async(args):
                 display_a = question["B"] if swapped else question["A"]
                 display_b = question["A"] if swapped else question["B"]
                 persona_prompt = persona_prompts[persona_id]["prompt"]
-                persona_instruction = ""
-                if persona_prompt:
-                    persona_instruction = experiment_prompts["persona_instruction"].format(persona_prompt=persona_prompt)
-                system = experiment_prompts["system"].format(persona_instruction=persona_instruction)
-                user = experiment_prompts["user"].format(
-                    frame=frame_text, display_a=display_a, display_b=display_b
-                )
                 payload = {
                     "model": model,
-                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                    "messages": experiment_messages(
+                        persona_prompt, experiment_prompts, frame_text, display_a, display_b
+                    ),
                     "temperature": config["experiment_temperature"],
                     "max_tokens": config["max_output_tokens"],
                 }
-                data, error = await openrouter_request(client, payload, api_key)
+                data, error, attempts = await openrouter_request(
+                    client,
+                    payload,
+                    api_key,
+                    request_context={
+                        "experiment_id": experiment_id,
+                        "fingerprint": fingerprint,
+                        "request_id": rid,
+                        "stage": "experiment",
+                        "model": model,
+                    },
+                    schema_name="preference_choice",
+                    schema=CHOICE_SCHEMA,
+                    log_attempt=log_http_attempt,
+                )
                 parsed, usage, model_choice = None, {}, None
                 if data:
                     usage = data.get("usage") or {}
@@ -210,36 +265,76 @@ async def main_async(args):
                         parsed = parse_json(data["choices"][0]["message"]["content"])
                     except (KeyError, IndexError, TypeError):
                         parsed = None
-                    if parsed:
+                    if isinstance(parsed, dict):
                         model_choice = str(parsed.get("choice", "")).strip().upper()
-                valid = model_choice in {"A", "B"}
-                canonical = ({"A": "B", "B": "A"}[model_choice] if swapped else model_choice) if valid else None
-                cost = extract_cost(data or {})
+                valid = valid_choice_response(parsed)
+                parsed_fields = parsed if isinstance(parsed, dict) else {}
+                canonical = (
+                    ({"A": "B", "B": "A"}[model_choice] if swapped else model_choice)
+                    if valid
+                    else None
+                )
+                cost = attempt_cost(attempts)
                 row = {
-                    "request_id": rid, "experiment_id": experiment_id,
-                    "model": model, "question_id": question["id"], "category": question["category"],
-                    "persona": persona_id, "frame": frame_id, "run": run,
-                    "original_A": question["A"], "original_B": question["B"],
-                    "display_A": display_a, "display_B": display_b,
-                    "display_order": "BA" if swapped else "AB", "model_choice": model_choice,
-                    "choice": model_choice, "canonical_choice": canonical,
-                    "what": (parsed or {}).get("what", ""), "why": (parsed or {}).get("why", ""), "how": (parsed or {}).get("how", ""),
-                    "input_tokens": usage.get("prompt_tokens", 0), "output_tokens": usage.get("completion_tokens", 0),
-                    "cost": cost, "status": "success" if valid else "error",
+                    "request_id": rid,
+                    "experiment_id": experiment_id,
+                    "experiment_fingerprint": fingerprint,
+                    "run_mode": mode,
+                    "expected_runs": runs,
+                    "model": model,
+                    "question_id": question["id"],
+                    "category": question["category"],
+                    "persona": persona_id,
+                    "frame": frame_id,
+                    "run": run,
+                    "original_A": question["A"],
+                    "original_B": question["B"],
+                    "display_A": display_a,
+                    "display_B": display_b,
+                    "display_order": "BA" if swapped else "AB",
+                    "model_choice": model_choice,
+                    "canonical_choice": canonical,
+                    "what": parsed_fields.get("what", ""),
+                    "why": parsed_fields.get("why", ""),
+                    "how": parsed_fields.get("how", ""),
+                    "input_tokens": usage.get("prompt_tokens", 0),
+                    "output_tokens": usage.get("completion_tokens", 0),
+                    "cost": cost,
+                    "raw_http_log": RAW_HTTP_LOG.name,
+                    "status": "success" if valid else "error",
                     "error": error or (None if valid else "Response was not valid choice JSON"),
                 }
                 async with write_lock:
-                    with open(OUTPUT, "a", encoding="utf-8") as f:
-                        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-                        f.flush()
+                    append_jsonl(OUTPUT, row)
                     state["cost"] += cost
                     state["done"] += 1
-                    print(f"{state['done']} / {total}\ncost: ${state['cost']:.4f}")
+                    print(f"{state['done']} / {total} | tracked cost: ${state['cost']:.4f}")
 
         await asyncio.gather(*(run_one(job) for job in jobs))
 
-    if state["stopped"]:
-        print(f"Stopped because tracked cost reached the ${float(config['max_budget_usd']):.2f} budget.")
+    current_successes = successful_ids() & expected_ids
+    completion = {
+        "reported_at": utc_now(),
+        "experiment_id": experiment_id,
+        "fingerprint": fingerprint,
+        "mode": mode,
+        "expected_requests": total,
+        "successful_requests": len(current_successes),
+        "missing_requests": total - len(current_successes),
+        "tracked_cost_usd": state["cost"],
+        "budget_stopped": state["stopped"],
+        "complete": len(current_successes) == total,
+    }
+    completion_path = RESULTS / f"completion_{fingerprint}_{mode}.json"
+    completion_path.write_text(json.dumps(completion, indent=2) + "\n", encoding="utf-8")
+
+    if not completion["complete"]:
+        reason = "budget reached" if state["stopped"] else "failed or invalid responses"
+        raise SystemExit(
+            f"Experiment incomplete ({completion['successful_requests']}/{total}; {reason}). "
+            "Rerun the same command to resume. Judges were not started."
+        )
+    print(f"Experiment complete: {total}/{total}. Raw HTTP log: {RAW_HTTP_LOG}")
 
 
 if __name__ == "__main__":

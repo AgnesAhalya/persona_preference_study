@@ -1,4 +1,6 @@
 .env
 **pycache**/
 results/
-
+.DS_Store
+*.pyc
+.commands.txt

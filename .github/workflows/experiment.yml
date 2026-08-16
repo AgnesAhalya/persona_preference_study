@@ -17,6 +17,15 @@ on:
         required: true
         default: false
         type: boolean
+      judge_a_rate_threshold:
+        description: "Judge bucket: 0=all; 0.5=A majority; 1=A always"
+        required: true
+        default: "0.5"
+        type: choice
+        options:
+          - "0"
+          - "0.5"
+          - "1"
 
 permissions:
   contents: read
@@ -60,14 +69,17 @@ jobs:
           docker run --rm \
             --env OPENROUTER_API_KEY \
             --volume "$PWD/results:/app/results" \
-            "$IMAGE_NAME" python run_judges.py
+            "$IMAGE_NAME" python run_judges.py \
+            --a-rate-threshold "${{ inputs.judge_a_rate_threshold }}"
 
       - name: Analyze available results
         if: ${{ always() && inputs.mode != 'dry-run' }}
         run: |
           docker run --rm \
             --volume "$PWD/results:/app/results" \
-            "$IMAGE_NAME" python analyze.py
+            "$IMAGE_NAME" python analyze.py \
+            --mode "${{ inputs.mode }}" \
+            --a-rate-threshold "${{ inputs.judge_a_rate_threshold }}"
 
       - name: Upload results
         if: ${{ always() && inputs.mode != 'dry-run' }}
@@ -77,4 +89,3 @@ jobs:
           path: results/
           if-no-files-found: warn
           retention-days: 30
-

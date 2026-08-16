@@ -1,65 +1,119 @@
 # Persona preference experiment
 
-The experiment runs locally, in Docker, or as a manually triggered GitHub Actions workflow. Before making API requests, replace the model placeholders in `config.yaml` with OpenRouter model IDs.
+This project measures whether an LLM's pairwise task preferences change across a no-system-prompt Assistant condition and five paper-inspired persona prompts. It runs locally in Docker, in Google Colab for a one-model/one-judge trial, or through a manual GitHub Actions workflow.
 
-See [EXPERIMENT.md](EXPERIMENT.md) for a simple explanation of the study, the dry-run/pilot/full modes, request counts, judge runs, and cost protection.
+The active `questions.json` is **PRPP-40**, a balanced but not yet human-validated 40-item candidate instrument. Its Care, Analytical, Autonomy, and Rule constructs are behavioral measurement axes—not six persona ground-truth labels. See `dataset_candidate/DATASET_CARD.md` and `dataset_candidate/VALIDATION_PROTOCOL.md` before treating it as a research instrument.
 
-The active `questions.json` contains **PRPP-40**, a balanced 40-item candidate instrument spanning Care, Analytical, Autonomy, and Rule decision contrasts. The experiment applies six paper-inspired personas to these shared questions, plus the P0 no-prompt baseline. The dataset card and validation protocol are in `dataset_candidate/`. The previous 40-question version is preserved as `dataset_candidate/questions_original.json`.
+## Configure models
 
-## Prompt files
+Replace the placeholders in `config.yaml` with valid OpenRouter model IDs:
 
-All LLM-facing wording is kept outside the Python scripts:
+```yaml
+experimental_models:
+  - provider/experiment-model-1
+  - provider/experiment-model-2
+judge_models:
+  - provider/judge-model-1
+  - provider/judge-model-2
+```
 
-- `prompts/personas.yaml` — persona instructions and judge-facing descriptions
-- `prompts/experiment.yaml` — question frames, experiment system prompt, and response template
-- `prompts/judges.yaml` — classification and default-profile judge prompts
-
-Their paths are configured under `prompt_files` in `config.yaml`. Rebuild the Docker image after editing a prompt file so the changed wording is copied into the image.
-
-## Run with Docker Compose
-
-Create a local `.env` file:
+Create `.env` locally:
 
 ```text
 OPENROUTER_API_KEY=your-key-here
 ```
 
-Build and check the experiment without API calls:
+## Docker commands
+
+Build and perform a zero-API dry run:
 
 ```bash
 docker compose build
 docker compose run --rm experiment
 ```
 
-Run the 60-request pilot:
+Run the 72-request pilot:
 
 ```bash
 docker compose run --rm experiment python run_experiment.py --pilot
 ```
 
-Run the full experiment, judges, and analysis:
+Run the default low-resource 1,440-request full experiment:
 
 ```bash
 docker compose run --rm experiment python run_experiment.py
-docker compose run --rm experiment python run_judges.py
-docker compose run --rm experiment python analyze.py
 ```
 
-The host `results/` directory is mounted into the container, so output survives when the container exits and interrupted experiments remain resumable.
-
-## Run with plain Docker
+Judge and analyze using the default A-majority bucket:
 
 ```bash
-docker build -t preference-experiment .
-docker run --rm --env-file .env -v "$PWD/results:/app/results" preference-experiment python run_experiment.py --pilot
+docker compose run --rm experiment python run_judges.py --a-rate-threshold 0.5
+docker compose run --rm experiment python analyze.py --a-rate-threshold 0.5
 ```
 
-## Run with GitHub Actions
+The judge bucket is configurable:
 
-1. Push the project to a GitHub repository.
-2. In **Settings → Secrets and variables → Actions**, create a repository secret named `OPENROUTER_API_KEY`.
+- `0` sends all aggregated questions.
+- `0.5` or `50` sends questions where A was selected more than 50% of observations.
+- `1` or `100` sends questions where A was selected every time.
+
+For each model, condition, and question, the default run combines three frames and one run per frame: three observations. The judge receives one complete batch containing the qualifying questions, their A/B rates, winning option, and—under the explanation condition—a representative explanation. Set `runs_per_condition: 3` only when you need nine observations; across all six conditions that increases the full experiment to 4,320 calls.
+
+There are exactly five prompted personas: Mathematician, Strategist, Contrarian, Slacker, and Adversarial. P0 is the sixth experiment condition: the Assistant receives only the task message and no system/persona prompt. The judge chooses P1-P5 or `OTHER`; P0 is not a classification candidate. When the judge selects `OTHER`, it must return a short name and description for the profile it inferred instead.
+
+## Raw HTTP logging
+
+Every OpenRouter attempt is appended to `results/raw_http_log.jsonl`, including:
+
+- timestamp, retry number, and duration;
+- exact method, URL, and JSON request body;
+- HTTP version, status, response headers, and unmodified raw response body;
+- reported cost and network error, if any.
+
+The real `Authorization` value is never logged. It is recorded as `Bearer [REDACTED]`.
+
+The log still contains full prompts and model outputs. `results/` is Git-ignored; treat downloaded artifacts as research data and review them before sharing.
+
+Summary result files reference the raw log by filename. Prompt/data fingerprints and immutable run manifests under `results/manifests/` prevent changed prompts or questions from silently reusing stale results.
+
+## GitHub Actions
+
+1. Put this directory in a Git repository and push it to GitHub.
+2. Add `OPENROUTER_API_KEY` under **Settings → Secrets and variables → Actions**.
 3. Open **Actions → Run preference experiment → Run workflow**.
-4. Choose `dry-run`, `pilot`, or `full`. Optionally enable the judges.
-5. Download the `preference-results-*` artifact when the run finishes.
+4. Select `dry-run`, `pilot`, or `full`, whether to run judges, and the judge A-rate threshold.
+5. Download the `preference-results-*` artifact.
 
-The workflow is manual and defaults to `dry-run`, which sends no API requests. Pilot and full runs use `max_budget_usd` from `config.yaml`. GitHub-hosted runners are temporary, so each workflow run starts with an empty `results/` directory; resumability applies within a run and to local Docker runs that reuse the same mounted directory.
+The workflow defaults to dry-run and sends no API requests. Real runs fail visibly when responses are missing or the budget stops the experiment; judges will not run on an incomplete batch. Artifacts are still uploaded for diagnosis.
+
+## Colab trial
+
+Open `colab_local_trial.ipynb` in Google Colab and use a T4 GPU. It uses one local Hugging Face model for responses and a different local model as judge, so it needs no OpenRouter key. It is a plumbing trial, not a questionnaire validation or final accuracy estimate.
+
+The trial performs 36 response generations, 10 persona classifications, and one separate P0 Assistant-profile generation. It captures raw local model output in three downloadable JSONL files.
+
+## Prompt files
+
+LLM-facing text is separated from the Python programs:
+
+- `prompts/personas.yaml` — five prompted personas (P1-P5) plus the empty P0 Assistant entry
+- `prompts/experiment.yaml` — three frames and response format
+- `prompts/judges.yaml` — whole-batch classification and P0 Assistant profile prompts
+
+Rebuild the Docker image after changing source, configuration, or prompts.
+
+## Main result files
+
+- `experiment.jsonl` — normalized experiment responses
+- `judges.jsonl` — whole-batch persona classifications
+- `inferred_default_behavioral_profile.jsonl` — inferred P0 Assistant profile descriptions
+- `judge_predictions.csv` and `other_profiles.csv` — judge decisions and profiles proposed for `OTHER`
+- `analysis_context.json` — the exact experiment fingerprint, judge fingerprint, and threshold used
+- `raw_http_log.jsonl` — exact redacted HTTP request/response audit log
+- `manifests/*.json` — full input snapshots and fingerprints
+- `completion_*.json` and `judge_completion_*.json` — completeness checks
+- CSV and PNG files — construct preferences, frame/order effects, buckets, accuracy, abstention, and confusion matrices
+
+The mounted `results/` directory makes local Docker runs resumable.
+
+Analysis is threshold- and mode-specific: `0`, `0.5`, and `1`, as well as pilot and full runs, receive different judge fingerprints. `analyze.py` includes only the requested threshold and mode instead of mixing runs.

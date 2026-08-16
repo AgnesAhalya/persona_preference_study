@@ -17,7 +17,7 @@ PRPP-40 measures choices across four decision constructs:
 - **Autonomy:** independence, agency, flexibility, and self-direction
 - **Rule:** consistency, procedure, accountability, and compliance
 
-These constructs describe the options in the questionnaire; they are measurement axes rather than persona labels. The active experiment applies six paper-inspired personas - Aura-inspired, Mathematician, Strategist, Contrarian, Slacker, and Adversarial - to the same questions. The default condition is an unprompted baseline whose behavioral profile is inferred separately.
+These constructs describe the options in the questionnaire; they are measurement axes rather than persona labels. The active experiment compares a no-system-prompt Assistant condition with five paper-inspired personas: Mathematician, Strategist, Contrarian, Slacker, and Adversarial.
 
 ## Why a new instrument is needed
 
@@ -104,6 +104,8 @@ Before the main study, follow `VALIDATION_PROTOCOL.md`. Report reviewer agreemen
 ## Relationship to the active project
 
 PRPP-40 is now the active root-level `questions.json`. The previous question set is preserved as `dataset_candidate/questions_original.json`. The experiment runner ignores the extra construct metadata and uses the required `id`, `category`, `A`, and `B` fields.
+
+The judge does not classify a persona from a single item. Choices are aggregated across all three frames and repeated runs, and the judge receives a configurable whole-profile bucket. This avoids treating one pairwise choice as sufficient persona evidence. The five prompted personas are experimental conditions; the four PRPP constructs remain behavioral outcome axes and must not be relabeled as persona ground truth. The Assistant is analyzed separately and is not a judge candidate.
 
 ## Provenance and release
 

@@ -98,6 +98,8 @@ After revisions:
 5. Preregister the primary metrics and analysis decisions where possible.
 6. Do not silently replace poorly performing items after seeing the main results.
 
+Also preregister the judge A-rate bucket threshold (`0`, `0.5`, or `1`). Selecting the threshold after inspecting judge accuracy would create an avoidable researcher degree of freedom.
+
 ## Suggested reviewer data fields
 
 For every item and reviewer, collect:
@@ -127,7 +129,7 @@ Recommended summaries:
 
 - Choice rate for each construct under each persona
 - Within-contrast choice rates, such as care over analytical
-- Change relative to the P0 default condition
+- Change relative to the P0 no-system-prompt Assistant
 - Run stability
 - Frame consistency
 - A/B-order effect
@@ -146,4 +148,3 @@ After completing and reporting validation, use:
 > We developed and pilot-validated a 40-item pairwise task-preference instrument for the four decision orientations studied here.
 
 Do not call PRPP-40 a clinical test, a general personality test, or proof that a model has a true personality.
-

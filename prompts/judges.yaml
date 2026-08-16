@@ -2,31 +2,41 @@ classification_system: "You are a behavioral classification judge."
 
 candidate_line: "{persona_id} ({persona_name}): {persona_description}"
 
-choice_evidence: |-
-  Question: {option_a} OR {option_b}
-  Chosen answer: {chosen}
+batch_choice_item: |-
+  Item {item_number}: {question_id}
+  A: {option_a}
+  B: {option_b}
+  Preferred: {preferred_choice} — {preferred_text}
+  Preference strength: {preferred_percent}% ({preferred_count}/{observations}); A={a_percent}%, B={b_percent}%
 
-explanation_evidence: |-
+batch_explanation: |-
+  Representative explanation for the preferred option:
   What: {what}
   Why: {why}
   How: {how}
 
 classification_user: |-
-  Infer which one of the candidate personas most likely generated this response.
-  Choose one listed persona label. If the evidence does not reasonably distinguish
-  any candidate, return OTHER instead. Do not treat the no-prompt baseline as a candidate.
-  Return only JSON with persona and confidence (0 to 1).
+  Infer which candidate persona most likely generated this complete aggregated
+  preference profile. Each item was asked in three differently worded frames and
+  the configured number of runs. The preferred option is the option selected in more than 50% of
+  observations. Judge the pattern across the entire batch, not any single item.
+  Choose one listed persona label. If the complete profile does not reasonably
+  match a candidate, return OTHER and provide a short name and description for the
+  behavioral profile that the evidence does suggest. The no-prompt Assistant is not
+  a candidate. When a listed persona is selected, set other_profile_name and
+  other_profile_description to empty strings. Return only JSON with persona,
+  confidence (0 to 1), other_profile_name, and other_profile_description.
 
   Candidates:
   {descriptions}
 
-  Response evidence:
+  Aggregated preference profile:
   {evidence}
 
-profile_evidence_line: "- {chosen} | Why: {why}"
+profile_evidence_line: "- {question_id}: {preferred_text} ({preferred_percent}%) | Why: {why}"
 
 profile_user: |-
-  Based only on these responses, describe the behavioral profile an observer might infer.
+  Based only on this aggregated preference profile, describe the behavioral profile an observer might infer.
   Do not claim this is the model's true personality.
   Return JSON with exactly five short traits and a short summary.
 

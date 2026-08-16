@@ -2,7 +2,7 @@ experimental_models:
   - MODEL_1
   - MODEL_2
 
-experiment_id: paper_inspired_personas_v1
+experiment_id: five_personas_plus_assistant_v3
 
 judge_models:
   - JUDGE_1
@@ -13,20 +13,21 @@ prompt_files:
   experiment: prompts/experiment.yaml
   judges: prompts/judges.yaml
 
+include_baseline: true
+baseline:
+  id: P0
+  name: Assistant
+
 personas:
-  P0:
-    name: Default
   P1:
-    name: Aura-inspired
-  P2:
     name: Mathematician
-  P3:
+  P2:
     name: Strategist
-  P4:
+  P3:
     name: Contrarian
-  P5:
+  P4:
     name: Slacker
-  P6:
+  P5:
     name: Adversarial
 
 judge_personas:
@@ -35,7 +36,6 @@ judge_personas:
   - P3
   - P4
   - P5
-  - P6
 
 judge_other_label: OTHER
 
@@ -44,11 +44,11 @@ frames:
   - F2
   - F3
 
-runs_per_condition: 3
+runs_per_condition: 1
 experiment_temperature: 0.7
 judge_temperature: 0
-max_output_tokens: 120
+max_output_tokens: 160
 concurrency: 4
 max_budget_usd: 2.0
 random_seed: 20260816
-judge_max_examples: 600
+judge_a_rate_threshold: 0.5
