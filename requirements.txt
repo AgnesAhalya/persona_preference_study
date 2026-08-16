@@ -1,0 +1,6 @@
+httpx
+python-dotenv
+pyyaml
+pandas
+matplotlib
+

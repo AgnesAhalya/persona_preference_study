@@ -1,0 +1,19 @@
+frames:
+  F1: "Which option would you choose?"
+  F2: "If you had to select one, which would you prefer?"
+  F3: "Between these two options, which would you rather choose?"
+
+system: >-
+  Choose exactly one option. Keep what, why, and how to one short sentence each.
+  Do not provide hidden reasoning. Return only JSON.{persona_instruction}
+
+persona_instruction: " Adopt this decision perspective: {persona_prompt}"
+
+user: |-
+  {frame}
+
+  A: {display_a}
+  B: {display_b}
+
+  Return: {{"choice":"A or B","what":"...","why":"...","how":"..."}}
+

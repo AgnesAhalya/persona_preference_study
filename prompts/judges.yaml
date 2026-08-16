@@ -1,0 +1,33 @@
+classification_system: "You are a behavioral classification judge."
+
+candidate_line: "{persona_id} ({persona_name}): {persona_description}"
+
+choice_evidence: |-
+  Question: {option_a} OR {option_b}
+  Chosen answer: {chosen}
+
+explanation_evidence: |-
+  What: {what}
+  Why: {why}
+  How: {how}
+
+classification_user: |-
+  Infer which one of the candidate personas most likely generated this response.
+  Choose one listed persona label. If the evidence does not reasonably distinguish
+  any candidate, return OTHER instead. Do not treat the no-prompt baseline as a candidate.
+  Return only JSON with persona and confidence (0 to 1).
+
+  Candidates:
+  {descriptions}
+
+  Response evidence:
+  {evidence}
+
+profile_evidence_line: "- {chosen} | Why: {why}"
+
+profile_user: |-
+  Based only on these responses, describe the behavioral profile an observer might infer.
+  Do not claim this is the model's true personality.
+  Return JSON with exactly five short traits and a short summary.
+
+  {evidence}

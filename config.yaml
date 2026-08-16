@@ -1,0 +1,54 @@
+experimental_models:
+  - MODEL_1
+  - MODEL_2
+
+experiment_id: paper_inspired_personas_v1
+
+judge_models:
+  - JUDGE_1
+  - JUDGE_2
+
+prompt_files:
+  personas: prompts/personas.yaml
+  experiment: prompts/experiment.yaml
+  judges: prompts/judges.yaml
+
+personas:
+  P0:
+    name: Default
+  P1:
+    name: Aura-inspired
+  P2:
+    name: Mathematician
+  P3:
+    name: Strategist
+  P4:
+    name: Contrarian
+  P5:
+    name: Slacker
+  P6:
+    name: Adversarial
+
+judge_personas:
+  - P1
+  - P2
+  - P3
+  - P4
+  - P5
+  - P6
+
+judge_other_label: OTHER
+
+frames:
+  - F1
+  - F2
+  - F3
+
+runs_per_condition: 3
+experiment_temperature: 0.7
+judge_temperature: 0
+max_output_tokens: 120
+concurrency: 4
+max_budget_usd: 2.0
+random_seed: 20260816
+judge_max_examples: 600

@@ -1,0 +1,10 @@
+services:
+  experiment:
+    build: .
+    image: preference-experiment:local
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+    volumes:
+      - ./results:/app/results
+    command: ["python", "run_experiment.py", "--dry-run"]
+

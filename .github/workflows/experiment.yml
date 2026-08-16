@@ -1,0 +1,80 @@
+name: Run preference experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Experiment size
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - pilot
+          - full
+      run_judges:
+        description: Run judges after the experiment
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      IMAGE_NAME: preference-experiment
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build --tag "$IMAGE_NAME" .
+
+      - name: Prepare results directory
+        run: mkdir -p results
+
+      - name: Run experiment
+        shell: bash
+        run: |
+          case "${{ inputs.mode }}" in
+            dry-run) mode_args=(--dry-run) ;;
+            pilot) mode_args=(--pilot) ;;
+            full) mode_args=() ;;
+            *) echo "Unknown mode" >&2; exit 1 ;;
+          esac
+
+          docker run --rm \
+            --env OPENROUTER_API_KEY \
+            --volume "$PWD/results:/app/results" \
+            "$IMAGE_NAME" python run_experiment.py "${mode_args[@]}"
+
+      - name: Run judges
+        if: ${{ inputs.run_judges && inputs.mode != 'dry-run' }}
+        run: |
+          docker run --rm \
+            --env OPENROUTER_API_KEY \
+            --volume "$PWD/results:/app/results" \
+            "$IMAGE_NAME" python run_judges.py
+
+      - name: Analyze available results
+        if: ${{ always() && inputs.mode != 'dry-run' }}
+        run: |
+          docker run --rm \
+            --volume "$PWD/results:/app/results" \
+            "$IMAGE_NAME" python analyze.py
+
+      - name: Upload results
+        if: ${{ always() && inputs.mode != 'dry-run' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: preference-results-${{ github.run_number }}
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
+
